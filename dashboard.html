@@ -6,8 +6,30 @@
     <title>Caretaker Dashboard | Saftech Rental Manager</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" href="ui.css">
+    <style>
+        /* Security enhancements */
+        .session-timeout-warning {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: #fef3c7;
+            color: #92400e;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 12px;
+            z-index: 1000;
+            display: none;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .session-timeout-warning.warning {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+    </style>
 </head>
 <body>
+    <div id="sessionWarning" class="session-timeout-warning"></div>
+    
     <div id="welcome-overlay" class="welcome-overlay show">
         <div class="welcome-content">
             <div class="spinner"></div>
@@ -38,7 +60,7 @@
         <a href="settings.html" class="nav-item">
             <i class="fas fa-gear"></i> Settings
         </a>
-        <a href="dashboard.html" class="nav-item">
+        <a href="#" class="nav-item" id="logoutBtn">
             <i class="fas fa-sign-out-alt"></i> Logout
         </a>
     </div>
@@ -127,13 +149,87 @@
         </div>
     </div>
 
-   <script src="api-config.js"></script>
-   <script>
+    <script src="api-config.js"></script>
+    <script>
     const API_URL = window.SAFTECH_API_URL;
     let allUnits = [];
     let selectedUnit = null;
     let appSettings = { water_rate: 235, garbage_fee: 100 };
+    let sessionCheckInterval = null;
 
+    // ========== AUTHENTICATION CHECK ==========
+    (function checkAuthentication() {
+        const role = localStorage.getItem('saftech_role');
+        const loginTime = localStorage.getItem('saftech_login_time');
+        
+        // Check if user is authenticated as caretaker
+        if (role !== 'caretaker') {
+            console.warn('Unauthorized access attempt to dashboard');
+            sessionStorage.setItem('redirectAfterLogin', 'dashboard.html');
+            window.location.href = 'index.html';
+            return;
+        }
+        
+        // Check if session is too old (optional: 8 hour timeout)
+        if (loginTime) {
+            const elapsed = Date.now() - parseInt(loginTime);
+            const eightHours = 8 * 60 * 60 * 1000;
+            if (elapsed > eightHours) {
+                console.warn('Session expired due to inactivity');
+                window.logout();
+                return;
+            }
+        }
+        
+        console.log('✓ Caretaker authenticated successfully');
+    })();
+
+    // ========== SESSION MANAGEMENT ==========
+    function startSessionMonitor() {
+        let inactivityTime = 0;
+        const sessionTimeout = 30 * 60 * 1000; // 30 minutes
+        
+        function resetInactivityTimer() {
+            inactivityTime = 0;
+            const warningEl = document.getElementById('sessionWarning');
+            warningEl.style.display = 'none';
+        }
+        
+        function checkInactivity() {
+            inactivityTime += 1000;
+            const remaining = sessionTimeout - inactivityTime;
+            
+            if (remaining <= 60000 && remaining > 0) { // Last minute warning
+                const warningEl = document.getElementById('sessionWarning');
+                warningEl.innerHTML = `<i class="fas fa-clock"></i> Session expires in ${Math.ceil(remaining/1000)} seconds`;
+                warningEl.style.display = 'block';
+                warningEl.classList.add('warning');
+            } else if (remaining <= 0) {
+                // Session expired
+                window.logout();
+            }
+        }
+        
+        // Reset timer on user activity
+        const events = ['mousedown', 'keydown', 'scroll', 'touchstart', 'click'];
+        events.forEach(event => {
+            document.addEventListener(event, resetInactivityTimer);
+        });
+        
+        sessionCheckInterval = setInterval(checkInactivity, 1000);
+    }
+
+    // ========== LOGOUT FUNCTIONALITY ==========
+    document.getElementById('logoutBtn').addEventListener('click', (e) => {
+        e.preventDefault();
+        if (sessionCheckInterval) {
+            clearInterval(sessionCheckInterval);
+        }
+        window.logout();
+    });
+
+    // ========== EXISTING FUNCTIONALITY WITH ENHANCEMENTS ==========
+    
     // Mobile sidebar functionality
     const mobileToggle = document.getElementById('mobileMenuToggle');
     const sidebar = document.getElementById('sidebar');
@@ -203,7 +299,7 @@
             const res = await fetch(`${API_URL}/units`);
             const units = await safeJson(res, null);
             if(units) {
-                document.getElementById('server-status').innerText = "● System Online";
+                document.getElementById('server-status').innerHTML = '<i class="fas fa-circle" style="color:#22c55e; font-size:10px;"></i> System Online';
                 document.getElementById('server-status').style.color = "#22c55e";
                 allUnits = units;
                 renderUnits(allUnits);
@@ -213,7 +309,8 @@
             }
         } catch (err) {
             console.error("Connection error:", err);
-            document.getElementById('server-status').innerText = "● Server Offline";
+            document.getElementById('server-status').innerHTML = '<i class="fas fa-circle" style="color:#ef4444; font-size:10px;"></i> Server Offline';
+            document.getElementById('server-status').style.color = "#ef4444";
         } finally {
             setTimeout(() => {
                 const overlay = document.getElementById('welcome-overlay');
@@ -224,6 +321,7 @@
 
     function renderUnits(units) {
         const grid = document.getElementById('units-grid');
+        if (!grid) return;
         grid.innerHTML = '';
         units.forEach(unit => {
             const isOccupied = unit.tenant_name && unit.tenant_name.trim() !== "";
@@ -235,17 +333,28 @@
             const floorLabel = Number(unit.floor) === 0 ? 'Ground Floor' : `Floor ${unit.floor ?? '-'}`;
 
             card.innerHTML = `
-                <div class="unit-id">${unit.id}</div>
-                <div class="unit-name">${isOccupied ? unit.tenant_name : 'AVAILABLE'}</div>
-                <div class="unit-sub">${floorLabel}</div>
-                <div class="unit-sub">${isOccupied ? 'Phone: ' + (unit.tenant_phone || 'N/A') : ''}</div>
+                <div class="unit-id">${escapeHtml(unit.id)}</div>
+                <div class="unit-name">${isOccupied ? escapeHtml(unit.tenant_name) : 'AVAILABLE'}</div>
+                <div class="unit-sub">${escapeHtml(floorLabel)}</div>
+                <div class="unit-sub">${isOccupied ? 'Phone: ' + escapeHtml(unit.tenant_phone || 'N/A') : ''}</div>
                 <div class="unit-sub">${isOccupied ? 'Bill: KES ' + currentBill : 'Vacant Unit'}</div>
                 <span class="badge ${isOccupied ? 'badge-pending' : 'badge-vacant'}">
-                    ${unitStatus}
+                    ${escapeHtml(unitStatus)}
                 </span>
             `;
             card.onclick = () => openModal(unit);
             grid.appendChild(card);
+        });
+    }
+    
+    // Simple XSS protection
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/[&<>]/g, function(m) {
+            if (m === '&') return '&amp;';
+            if (m === '<') return '&lt;';
+            if (m === '>') return '&gt;';
+            return m;
         });
     }
 
@@ -264,10 +373,14 @@
         const deposit = document.getElementById('obDeposit').value.trim();
         const msg = document.getElementById('obMsg');
 
-        if(!unitId || !name) return alert("Please fill Unit ID and Name");
+        if(!unitId || !name) {
+            alert("Please fill Unit ID and Name");
+            return;
+        }
 
         try {
             msg.innerText = "Saving...";
+            msg.style.color = "#2563eb";
             const res = await fetch(`${API_URL}/units/${unitId}/onboard`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -279,13 +392,27 @@
                 })
             });
             if(res.ok) {
-                msg.innerText = "✅ Successfully saved!";
+                msg.innerHTML = "✅ Successfully saved!";
+                msg.style.color = "#22c55e";
                 document.getElementById('obUnit').value = '';
                 document.getElementById('obName').value = '';
+                document.getElementById('obPhone').value = '';
+                document.getElementById('obRent').value = '';
                 document.getElementById('obDeposit').value = '';
+                setTimeout(() => {
+                    msg.innerHTML = '';
+                }, 3000);
                 init();
+            } else {
+                const error = await res.json();
+                msg.innerHTML = "❌ Error: " + (error.error || "Failed to save");
+                msg.style.color = "#ef4444";
             }
-        } catch (err) { console.error(err); }
+        } catch (err) { 
+            console.error(err);
+            msg.innerHTML = "❌ Connection error";
+            msg.style.color = "#ef4444";
+        }
     }
 
     function openModal(unit) {
@@ -296,6 +423,7 @@
             document.querySelector('.nav-item[data-section="onboard"]').classList.add('active');
             document.querySelector('.nav-item[data-section="dashboard"]').classList.remove('active');
             document.getElementById('obUnit').value = unit.id;
+            document.getElementById('obName').focus();
             // Scroll to onboard section
             onboardSection.scrollIntoView({ behavior: 'smooth' });
             return;
@@ -371,24 +499,33 @@
                 alert("✅ Bill Successfully Saved for " + selectedUnit.id);
                 const shouldSendSms = document.getElementById('sendStatementSms')?.checked;
                 if (shouldSendSms) {
-                    const smsRes = await fetch(`${API_URL}/notifications/units/${selectedUnit.id}/statement`, { method: 'POST' });
-                    if (!smsRes.ok) {
-                        const smsErr = await smsRes.json().catch(() => ({}));
-                        alert(`Bill saved, but SMS was not queued: ${smsErr.error || 'Unknown error'}`);
+                    try {
+                        const smsRes = await fetch(`${API_URL}/notifications/units/${selectedUnit.id}/statement`, { method: 'POST' });
+                        if (!smsRes.ok) {
+                            const smsErr = await smsRes.json().catch(() => ({}));
+                            alert(`Bill saved, but SMS was not queued: ${smsErr.error || 'Unknown error'}`);
+                        } else {
+                            console.log('SMS notification sent');
+                        }
+                    } catch (smsError) {
+                        console.error('SMS send error:', smsError);
                     }
                 }
                 closeModal();
                 init();
             } else {
                 const err = await res.json();
-                alert("Error: " + err.error);
+                alert("Error: " + (err.error || "Failed to save bill"));
             }
         } catch (err) {
             console.error("Submission Error:", err);
+            alert("Network error. Please check your connection.");
         }
     }
 
-    function closeModal() { document.getElementById('readingModal').style.display = 'none'; }
+    function closeModal() { 
+        document.getElementById('readingModal').style.display = 'none'; 
+    }
     
     function filterUnits() {
         const term = document.getElementById('searchInput').value.toLowerCase();
@@ -398,7 +535,12 @@
         ));
     }
 
+    // Start the application
     init();
+    startSessionMonitor();
+    
+    // Log successful dashboard access
+    console.log('✓ Dashboard loaded successfully at:', new Date().toISOString());
 </script>
 </body>
 </html>
