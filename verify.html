@@ -161,16 +161,12 @@
         <div class="stat-label">Pending Bills</div>
       </div>
       <div class="stat-card">
-        <div class="stat-value" id="pendingUploadsCount">0</div>
-        <div class="stat-label">Pending Uploads</div>
-      </div>
-      <div class="stat-card">
         <div class="stat-value" id="totalUploadsCount">0</div>
         <div class="stat-label">Total Uploads</div>
       </div>
     </div>
 
-    <!-- Pending Bills Section -->
+    <!-- Pending Clearances Section (with Approve/Reject) -->
     <div class="panel pad" style="margin-top: 20px;">
       <div class="h2">
         <i class="fa-solid fa-clock"></i> Pending Clearances
@@ -183,17 +179,9 @@
       </div>
     </div>
 
-    <!-- Tenant Uploads Queue -->
-    <div class="panel pad" style="margin-top: 20px;">
-      <div class="h2"><i class="fa-solid fa-upload"></i> Tenant Uploads Queue (FIFO)</div>
-      <div id="uploadList" style="margin-top: 15px;">
-        <p class="muted"><i class="fa-solid fa-spinner fa-spin"></i> Loading tenant uploads...</p>
-      </div>
-    </div>
-
-    <!-- All Upload Records -->
+    <!-- All Upload Records (History) -->
     <div class="panel pad" style="margin-top: 20px; margin-bottom: 80px;">
-      <div class="h2"><i class="fa-solid fa-database"></i> All Tenant Upload Records</div>
+      <div class="h2"><i class="fa-solid fa-database"></i> All Upload Records (History)</div>
       <div id="uploadTable" style="margin-top: 15px; overflow-x: auto;">
         <p class="muted"><i class="fa-solid fa-spinner fa-spin"></i> Loading upload records...</p>
       </div>
@@ -257,9 +245,8 @@
     }
 
     // ========== UPDATE STATISTICS ==========
-    async function updateStats(pendingBills, pendingUploads, totalUploads) {
+    async function updateStats(pendingBills, totalUploads) {
         document.getElementById('pendingBillsCount').textContent = pendingBills || 0;
-        document.getElementById('pendingUploadsCount').textContent = pendingUploads || 0;
         document.getElementById('totalUploadsCount').textContent = totalUploads || 0;
     }
 
@@ -275,7 +262,7 @@
         document.getElementById('imageModal').style.display = 'none';
     }
 
-    // ========== LOAD PENDING BILLS ==========
+    // ========== LOAD PENDING CLEARANCES ==========
     async function loadPending() {
         const container = document.getElementById('verifyList');
         try {
@@ -283,12 +270,25 @@
             const units = await unitRes.json();
             const pendingUnits = units.filter(u => u.tenant_name && u.tenant_name.trim() !== "" && Number(u.total_bill) > 0);
             
-            // Get latest uploads for each unit
-            const latestRes = await fetch(`${API_URL}/payments/uploads/latest`).catch(() => ({ ok: false }));
-            let latestByUnit = new Map();
-            if (latestRes.ok) {
-                const latestUploads = await latestRes.json();
-                latestByUnit = new Map(latestUploads.map(u => [String(u.unit_id).toUpperCase(), u]));
+            // Get all uploads for each unit to show the latest pending one
+            const allUploadsRes = await fetch(`${API_URL}/payments/uploads`).catch(() => ({ ok: false }));
+            let uploadsByUnit = new Map();
+            if (allUploadsRes.ok) {
+                const allUploads = await allUploadsRes.json();
+                // Group uploads by unit and find the latest pending one
+                allUploads.forEach(u => {
+                    const unitKey = String(u.unit_id).toUpperCase();
+                    if (!uploadsByUnit.has(unitKey)) {
+                        uploadsByUnit.set(unitKey, []);
+                    }
+                    uploadsByUnit.get(unitKey).push(u);
+                });
+                // Sort each unit's uploads by date (newest first) and keep only pending ones
+                for (let [unitKey, uploads] of uploadsByUnit.entries()) {
+                    uploads.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+                    const pendingUploads = uploads.filter(u => u.status === 'Pending');
+                    uploadsByUnit.set(unitKey, pendingUploads[0]); // Keep only the latest pending upload
+                }
             }
             
             if (pendingUnits.length === 0) {
@@ -296,17 +296,20 @@
                     <i class="fa-solid fa-check-circle" style="font-size: 48px; color: #10b981; margin-bottom: 10px; display: block;"></i>
                     ✅ All bills are currently cleared.
                 </div>`;
-                updateStats(0, 0, 0);
+                
+                // Update total uploads count for stats
+                const totalUploadsRes = await fetch(`${API_URL}/payments/uploads`).catch(() => ({ ok: false }));
+                let totalUploads = 0;
+                if (totalUploadsRes.ok) {
+                    const allUploads = await totalUploadsRes.json();
+                    totalUploads = allUploads.length;
+                }
+                updateStats(0, totalUploads);
                 return;
             }
 
-            let totalPendingUploads = 0;
             container.innerHTML = pendingUnits.map(u => {
-                const up = latestByUnit.get(String(u.id).toUpperCase());
-                if (up && up.status === 'Pending') totalPendingUploads++;
-                
-                const statusColor = !up ? '#64748b' : (up.status === 'Pending' ? '#f59e0b' : (up.status === 'Approved' ? '#10b981' : '#ef4444'));
-                const statusText = !up ? 'No Upload' : up.status;
+                const up = uploadsByUnit.get(String(u.id).toUpperCase());
                 
                 return `
                 <div class="panel pad verification-item" style="margin-bottom: 15px; border: 1px solid #334155;">
@@ -314,7 +317,7 @@
                         <div style="flex: 1;">
                             <div style="font-weight: bold; font-size: 1.2em;">
                                 Unit ${escapeHtml(u.id)} - ${escapeHtml(u.tenant_name)}
-                                <span class="status-badge status-pending" style="margin-left: 10px;">Due: KES ${u.total_bill.toLocaleString()}</span>
+                                <span class="status-badge status-pending" style="margin-left: 10px;">Due: KES ${Number(u.total_bill).toLocaleString()}</span>
                             </div>
                             <div class="muted small" style="margin-top: 8px;">
                                 <i class="fa-solid fa-phone"></i> ${escapeHtml(u.tenant_phone || 'N/A')} &nbsp;|&nbsp;
@@ -323,8 +326,7 @@
                             ${up ? `
                                 <div style="margin-top: 12px; padding: 10px; border: 1px solid #334155; border-radius: 10px; background: rgba(15,23,42,0.45);">
                                     <div class="small muted">
-                                        <i class="fa-solid fa-upload"></i> Latest Upload • 
-                                        <span style="color:${statusColor}; font-weight:700;">${statusText}</span> • 
+                                        <i class="fa-solid fa-upload"></i> Pending Upload • 
                                         ${new Date(up.created_at).toLocaleString()}
                                     </div>
                                     <div class="small" style="margin-top: 6px; white-space: pre-wrap;">${escapeHtml(up.message || '')}</div>
@@ -338,33 +340,39 @@
                                         </div>
                                     ` : '<div class="small muted" style="margin-top: 6px;"><i class="fa-solid fa-image"></i> No screenshot attached.</div>'}
                                 </div>
-                            ` : '<div class="muted small" style="margin-top: 12px;"><i class="fa-solid fa-info-circle"></i> No payment proof uploaded yet.</div>'}
-                        </div>
-                        <div style="display: flex; flex-direction: column; gap: 8px; min-width: 140px;">
-                            <button class="btn btn-primary" onclick="approvePayment('${u.id}')">
-                                <i class="fa-solid fa-check-circle"></i> Approve & Clear
-                            </button>
-                            ${up && up.status === 'Pending' ? `
-                                <button class="btn ghost" onclick="reviewUpload(${up.id}, 'approve')">
-                                    <i class="fa-solid fa-thumbs-up"></i> Approve Upload
-                                </button>
-                                <button class="btn ghost" onclick="reviewUpload(${up.id}, 'reject')">
-                                    <i class="fa-solid fa-thumbs-down"></i> Reject Upload
-                                </button>
-                            ` : ''}
+                                
+                                <!-- Approve/Reject Buttons for the upload -->
+                                <div style="margin-top: 12px; display: flex; gap: 10px; flex-wrap: wrap;">
+                                    <button class="btn btn-primary" onclick="approveAndClear('${u.id}', ${up.id})">
+                                        <i class="fa-solid fa-check-circle"></i> Approve Upload & Clear Bill
+                                    </button>
+                                    <button class="btn ghost" onclick="rejectUploadOnly(${up.id}, '${u.id}')">
+                                        <i class="fa-solid fa-times-circle"></i> Reject Upload
+                                    </button>
+                                </div>
+                            ` : `
+                                <div class="muted small" style="margin-top: 12px;">
+                                    <i class="fa-solid fa-info-circle"></i> No pending upload. Use manual approval below.
+                                </div>
+                                <div style="margin-top: 12px;">
+                                    <button class="btn btn-primary" onclick="approvePayment('${u.id}')">
+                                        <i class="fa-solid fa-check-circle"></i> Clear Bill (Manual)
+                                    </button>
+                                </div>
+                            `}
                         </div>
                     </div>
                 </div>
             `}).join('');
             
-            // Update stats after counting
+            // Update total uploads count for stats
             const totalUploadsRes = await fetch(`${API_URL}/payments/uploads`).catch(() => ({ ok: false }));
             let totalUploads = 0;
             if (totalUploadsRes.ok) {
                 const allUploads = await totalUploadsRes.json();
                 totalUploads = allUploads.length;
             }
-            updateStats(pendingUnits.length, totalPendingUploads, totalUploads);
+            updateStats(pendingUnits.length, totalUploads);
             
         } catch (err) {
             console.error("Error loading pending bills:", err);
@@ -375,61 +383,7 @@
         }
     }
 
-    // ========== LOAD PENDING UPLOADS QUEUE ==========
-    async function loadUploads() {
-        const container = document.getElementById('uploadList');
-        try {
-            const res = await fetch(`${API_URL}/payments/uploads/pending`);
-            if (!res.ok) throw new Error('Failed to load');
-            const uploads = await res.json();
-            
-            if (!uploads.length) {
-                container.innerHTML = `<div class="muted" style="text-align:center; padding: 30px;">
-                    <i class="fa-solid fa-inbox" style="font-size: 48px; color: #64748b; margin-bottom: 10px; display: block;"></i>
-                    No pending tenant uploads.
-                </div>`;
-                return;
-            }
-            
-            container.innerHTML = uploads.map(u => `
-                <div class="panel pad verification-item" style="margin-bottom: 15px; border: 1px solid #334155;">
-                    <div class="row" style="justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 15px;">
-                        <div style="flex: 1;">
-                            <div style="font-weight: bold; font-size: 1.1em;">
-                                Unit ${escapeHtml(u.unit_id)} • ${escapeHtml(u.tenant_phone)}
-                                <span class="status-badge status-pending" style="margin-left: 10px;">Pending Review</span>
-                            </div>
-                            <div class="muted small">
-                                <i class="fa-solid fa-hashtag"></i> Code: ${escapeHtml(u.tx_code || 'N/A')} • 
-                                <i class="fa-solid fa-clock"></i> ${new Date(u.created_at).toLocaleString()}
-                            </div>
-                            <div class="small" style="margin-top: 8px; white-space: pre-wrap; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 6px;">
-                                ${escapeHtml(u.message || '')}
-                            </div>
-                            ${u.image_url ? `
-                                <div style="margin-top: 10px;">
-                                    <img src="${API_BASE}${u.image_url}" alt="proof" class="proof-image" onclick="viewFullImage('${u.image_url}')">
-                                </div>
-                            ` : '<div class="small muted" style="margin-top: 8px;"><i class="fa-solid fa-image"></i> No screenshot attached.</div>'}
-                        </div>
-                        <div style="display: flex; gap: 8px; min-width: 120px;">
-                            <button class="btn btn-primary" onclick="reviewUpload(${u.id}, 'approve')">
-                                <i class="fa-solid fa-check"></i> Approve
-                            </button>
-                            <button class="btn ghost" onclick="reviewUpload(${u.id}, 'reject')">
-                                <i class="fa-solid fa-xmark"></i> Reject
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            `).join('');
-        } catch (err) {
-            console.error("Error loading uploads:", err);
-            container.innerHTML = `<div class="muted small" style="text-align:center; padding: 20px; color: #ef4444;">Could not load tenant uploads.</div>`;
-        }
-    }
-
-    // ========== LOAD ALL UPLOAD RECORDS ==========
+    // ========== LOAD ALL UPLOAD RECORDS (HISTORY) ==========
     async function loadUploadTable() {
         const container = document.getElementById('uploadTable');
         try {
@@ -444,6 +398,9 @@
                 </div>`;
                 return;
             }
+            
+            // Sort by date (newest first)
+            rows.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
             
             container.innerHTML = rows.map(r => {
                 let statusClass = '';
@@ -461,7 +418,7 @@
                             </div>
                             <div class="muted small">
                                 <i class="fa-solid fa-hashtag"></i> Code: ${escapeHtml(r.tx_code || 'N/A')} • 
-                                <i class="fa-solid fa-clock"></i> ${new Date(r.created_at).toLocaleString()}
+                                <i class="fa-solid fa-clock"></i> Submitted: ${new Date(r.created_at).toLocaleString()}
                                 ${r.reviewed_at ? ` • Reviewed: ${new Date(r.reviewed_at).toLocaleString()}` : ''}
                             </div>
                             <div class="small" style="margin-top: 6px; white-space: pre-wrap;">${escapeHtml(r.message || '')}</div>
@@ -478,7 +435,81 @@
         }
     }
 
-    // ========== APPROVE PAYMENT (Clear Bill) ==========
+    // ========== APPROVE UPLOAD AND CLEAR BILL ==========
+    async function approveAndClear(unitId, uploadId) {
+        if(!confirm(`✅ Confirm: Approve payment for Unit ${unitId} and clear balance?`)) return;
+
+        const btn = event.target.closest('button');
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing...';
+        btn.disabled = true;
+
+        try {
+            // First approve the upload
+            const uploadRes = await fetch(`${API_URL}/payments/uploads/${uploadId}/review`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'approve' })
+            });
+            
+            if (!uploadRes.ok) {
+                throw new Error('Failed to approve upload');
+            }
+            
+            // Then clear the bill
+            const billRes = await fetch(`${API_URL}/payments/approve`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ unitId })
+            });
+            
+            if (billRes.ok) {
+                alert(`✅ Success: Unit ${unitId} payment approved and balance cleared!`);
+                refreshAllData();
+            } else {
+                alert(`⚠️ Upload approved but bill clearance failed. Please manually clear the bill.`);
+                refreshAllData();
+            }
+        } catch (err) {
+            console.error('Error:', err);
+            alert(`❌ Error: ${err.message}`);
+        } finally {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }
+    }
+
+    // ========== REJECT UPLOAD ONLY ==========
+    async function rejectUploadOnly(uploadId, unitId) {
+        if(!confirm(`❌ Confirm: Reject payment upload for Unit ${unitId}? The tenant will need to resubmit.`)) return;
+
+        const btns = document.querySelectorAll(`button[onclick*="rejectUploadOnly(${uploadId}"]`);
+        btns.forEach(btn => {
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+            btn.disabled = true;
+        });
+
+        try {
+            const res = await fetch(`${API_URL}/payments/uploads/${uploadId}/review`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'reject' })
+            });
+            
+            if (!res.ok) {
+                throw new Error('Failed to reject upload');
+            }
+            
+            alert(`✅ Upload for Unit ${unitId} has been rejected.`);
+            refreshAllData();
+        } catch (err) {
+            alert(`❌ Error: ${err.message}`);
+        } finally {
+            refreshAllData();
+        }
+    }
+
+    // ========== APPROVE PAYMENT ONLY (Manual Clear) ==========
     async function approvePayment(unitId) {
         if(!confirm(`⚠️ WARNING: This will clear the entire balance for Unit ${unitId}. Continue?`)) return;
 
@@ -508,45 +539,10 @@
         }
     }
 
-    // ========== REVIEW UPLOAD ==========
-    async function reviewUpload(uploadId, action) {
-        const title = action === 'approve' ? 'approve' : 'reject';
-        const confirmMsg = action === 'approve' 
-            ? `✅ Confirm APPROVE upload #${uploadId}? This will mark the payment as verified.`
-            : `❌ Confirm REJECT upload #${uploadId}? The tenant will need to resubmit.`;
-            
-        if (!confirm(confirmMsg)) return;
-
-        const btns = document.querySelectorAll(`button[onclick*="reviewUpload(${uploadId}"]`);
-        btns.forEach(btn => {
-            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
-            btn.disabled = true;
-        });
-
-        try {
-            const res = await fetch(`${API_URL}/payments/uploads/${uploadId}/review`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action })
-            });
-            const payload = await res.json().catch(() => ({}));
-            if (!res.ok) {
-                throw new Error(payload.error || `Could not ${title} upload.`);
-            }
-            alert(`✅ Upload ${title}d successfully.`);
-            refreshAllData();
-        } catch (err) {
-            alert(`❌ ${err.message}`);
-        } finally {
-            refreshAllData();
-        }
-    }
-
     // ========== REFRESH ALL DATA ==========
     async function refreshAllData() {
         await Promise.all([
             loadPending(),
-            loadUploads(),
             loadUploadTable()
         ]);
     }
