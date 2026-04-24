@@ -1,7 +1,7 @@
 (() => {
-  // Set this once for production frontend (Cloudflare Pages).
-  // Example: window.SAFTECH_BACKEND_URL = "https://abc.trycloudflare.com";
-  const PROD_BACKEND_BASE = window.SAFTECH_BACKEND_URL || "";
+  // --- SAFTECH RESOLUTIONS CONFIGURATION ---
+  // This connects your Cloudflare frontend to your Render backend
+  const PROD_BACKEND_BASE = "https://saftech-rental-system-management.onrender.com";
 
   function normalizeBase(url) {
     return String(url || "").replace(/\/+$/, "");
@@ -9,18 +9,22 @@
 
   const { protocol, hostname, port, origin } = window.location;
 
-  // Local development: HTML on 5500/5501, API on 3000.
+  // 1. Local development check
+  // If you are running HTML on 5500/5501 locally, it still looks for your local Node server on 3000
   if ((hostname === "127.0.0.1" || hostname === "localhost") && port && port !== "3000") {
     window.SAFTECH_API_URL = `${protocol}//${hostname}:3000/api`;
+    console.log("Saftech API Mode: Local Development");
     return;
   }
 
-  // Cloudflare Pages or any static host with external backend.
+  // 2. Production (Live) Mode
+  // This uses your Render URL when the site is live on Cloudflare
   if (PROD_BACKEND_BASE) {
     window.SAFTECH_API_URL = `${normalizeBase(PROD_BACKEND_BASE)}/api`;
+    console.log("Saftech API Mode: Live Production (Render)");
     return;
   }
 
-  // Fallback: same-origin API (works when frontend and backend share host).
+  // 3. Fallback
   window.SAFTECH_API_URL = `${origin}/api`;
 })();
