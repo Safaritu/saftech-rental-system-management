@@ -5,7 +5,7 @@ const fs = require('fs');
 const multer = require('multer');
 const pool = require('../config/db'); 
 
-const uploadDir = path.join(__dirname, '../../public/uploads');
+const uploadDir = path.join(__dirname, '../../uploads');
 if (!fs.existsSync(uploadDir)) {
     fs.mkdirSync(uploadDir, { recursive: true });
 }

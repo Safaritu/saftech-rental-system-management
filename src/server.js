@@ -8,8 +8,8 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Serve static files from the 'public' folder
-app.use(express.static(path.join(__dirname, '../public')));
+// Serve static files from project root (flat frontend structure)
+app.use(express.static(path.join(__dirname, '..')));
 
 // Simple test route to verify API is alive
 app.get('/ping', (req, res) => res.send('Pong! Saftech API is active.'));
