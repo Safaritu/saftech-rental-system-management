@@ -25,6 +25,48 @@
             background: #fee2e2;
             color: #991b1b;
         }
+        
+        /* Payment pending indicator */
+        .payment-pending {
+            position: relative;
+            overflow: hidden;
+        }
+        .payment-pending::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(45deg, rgba(245, 158, 11, 0.1) 0%, rgba(245, 158, 11, 0.05) 100%);
+            pointer-events: none;
+            z-index: 1;
+        }
+        .pending-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            background: #f59e0b;
+            color: white;
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-size: 0.7rem;
+            font-weight: bold;
+            margin-left: 8px;
+        }
+        .btn-manual-payment {
+            background: #10b981;
+            color: white;
+            border: none;
+            padding: 4px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.75rem;
+            margin-left: 8px;
+        }
+        .btn-manual-payment:hover {
+            background: #059669;
+        }
     </style>
 </head>
 <body>
@@ -89,6 +131,10 @@
                 <small>Total Monthly Revenue</small>
                 <div class="stat-value" id="total-revenue">KES 0</div>
             </div>
+            <div class="card pad">
+                <small>Pending Approvals</small>
+                <div class="stat-value" id="pending-approvals">0</div>
+            </div>
         </div>
 
         <div id="dashboard-section">
@@ -149,6 +195,32 @@
         </div>
     </div>
 
+    <!-- Manual Payment Modal -->
+    <div id="manualPaymentModal" class="modal">
+        <div class="modal-content" style="max-width: 400px;">
+            <h3>Manual Payment Approval</h3>
+            <p>Unit: <strong id="manualUnitId"></strong></p>
+            <p>Tenant: <strong id="manualTenantName"></strong></p>
+            <p>Current Balance: <strong id="manualBalance">KES 0</strong></p>
+            <hr>
+            <div class="form-group">
+                <label>Payment Amount (KES)</label>
+                <input type="number" id="paymentAmount" class="form-control" placeholder="Enter amount paid" style="width:100%; padding:10px; margin-bottom:15px; border-radius:8px;">
+            </div>
+            <div class="form-group">
+                <label>Transaction Reference (Optional)</label>
+                <input type="text" id="transactionRef" class="form-control" placeholder="e.g., MPESA-XXXXX" style="width:100%; padding:10px; margin-bottom:15px; border-radius:8px;">
+            </div>
+            <div class="row" style="gap:10px;">
+                <button class="btn btn-primary" onclick="submitManualPayment()">
+                    <i class="fa-solid fa-check"></i> Approve Payment
+                </button>
+                <button class="btn btn-secondary" onclick="closeManualModal()">Cancel</button>
+            </div>
+            <div id="manualMsg" style="margin-top:10px; font-size:0.85rem;"></div>
+        </div>
+    </div>
+
     <script src="api-config.js"></script>
     <script>
     const API_URL = window.SAFTECH_API_URL;
@@ -156,21 +228,19 @@
     let selectedUnit = null;
     let appSettings = { water_rate: 235, garbage_fee: 100 };
     let sessionCheckInterval = null;
+    let pendingApprovalsCount = 0;
 
     // ========== AUTHENTICATION CHECK ==========
     (function checkAuthentication() {
         const role = localStorage.getItem('saftech_role');
         const loginTime = localStorage.getItem('saftech_login_time');
         
-        // Check if user is authenticated as caretaker
         if (role !== 'caretaker') {
             console.warn('Unauthorized access attempt to dashboard');
-            sessionStorage.setItem('redirectAfterLogin', 'dashboard.html');
             window.location.href = 'index.html';
             return;
         }
         
-        // Check if session is too old (optional: 8 hour timeout)
         if (loginTime) {
             const elapsed = Date.now() - parseInt(loginTime);
             const eightHours = 8 * 60 * 60 * 1000;
@@ -187,7 +257,7 @@
     // ========== SESSION MANAGEMENT ==========
     function startSessionMonitor() {
         let inactivityTime = 0;
-        const sessionTimeout = 30 * 60 * 1000; // 30 minutes
+        const sessionTimeout = 30 * 60 * 1000;
         
         function resetInactivityTimer() {
             inactivityTime = 0;
@@ -199,18 +269,16 @@
             inactivityTime += 1000;
             const remaining = sessionTimeout - inactivityTime;
             
-            if (remaining <= 60000 && remaining > 0) { // Last minute warning
+            if (remaining <= 60000 && remaining > 0) {
                 const warningEl = document.getElementById('sessionWarning');
                 warningEl.innerHTML = `<i class="fas fa-clock"></i> Session expires in ${Math.ceil(remaining/1000)} seconds`;
                 warningEl.style.display = 'block';
                 warningEl.classList.add('warning');
             } else if (remaining <= 0) {
-                // Session expired
                 window.logout();
             }
         }
         
-        // Reset timer on user activity
         const events = ['mousedown', 'keydown', 'scroll', 'touchstart', 'click'];
         events.forEach(event => {
             document.addEventListener(event, resetInactivityTimer);
@@ -228,9 +296,7 @@
         window.logout();
     });
 
-    // ========== EXISTING FUNCTIONALITY WITH ENHANCEMENTS ==========
-    
-    // Mobile sidebar functionality
+    // ========== MOBILE SIDEBAR ==========
     const mobileToggle = document.getElementById('mobileMenuToggle');
     const sidebar = document.getElementById('sidebar');
     const mobileOverlay = document.getElementById('mobileOverlay');
@@ -265,7 +331,6 @@
                 onboardSection.style.display = 'none';
                 navItems.forEach(nav => nav.classList.remove('active'));
                 item.classList.add('active');
-                // Close mobile sidebar on navigation
                 sidebar.classList.remove('mobile-open');
                 mobileOverlay.classList.remove('active');
                 document.body.style.overflow = '';
@@ -275,7 +340,6 @@
                 onboardSection.style.display = 'block';
                 navItems.forEach(nav => nav.classList.remove('active'));
                 item.classList.add('active');
-                // Close mobile sidebar on navigation
                 sidebar.classList.remove('mobile-open');
                 mobileOverlay.classList.remove('active');
                 document.body.style.overflow = '';
@@ -304,6 +368,7 @@
                 allUnits = units;
                 renderUnits(allUnits);
                 updateStats(allUnits);
+                await loadPendingApprovals();
             } else {
                 throw new Error("API unavailable or non-JSON response.");
             }
@@ -319,35 +384,6 @@
         }
     }
 
-    function renderUnits(units) {
-        const grid = document.getElementById('units-grid');
-        if (!grid) return;
-        grid.innerHTML = '';
-        units.forEach(unit => {
-            const isOccupied = unit.tenant_name && unit.tenant_name.trim() !== "";
-            const card = document.createElement('div');
-            card.className = `unit-card ${!isOccupied ? 'vacant' : ''}`;
-            
-            const currentBill = unit.total_bill ? Number(unit.total_bill).toLocaleString() : '0';
-            const unitStatus = unit.status || (isOccupied ? 'Occupied' : 'Vacant');
-            const floorLabel = Number(unit.floor) === 0 ? 'Ground Floor' : `Floor ${unit.floor ?? '-'}`;
-
-            card.innerHTML = `
-                <div class="unit-id">${escapeHtml(unit.id)}</div>
-                <div class="unit-name">${isOccupied ? escapeHtml(unit.tenant_name) : 'AVAILABLE'}</div>
-                <div class="unit-sub">${escapeHtml(floorLabel)}</div>
-                <div class="unit-sub">${isOccupied ? 'Phone: ' + escapeHtml(unit.tenant_phone || 'N/A') : ''}</div>
-                <div class="unit-sub">${isOccupied ? 'Bill: KES ' + currentBill : 'Vacant Unit'}</div>
-                <span class="badge ${isOccupied ? 'badge-pending' : 'badge-vacant'}">
-                    ${escapeHtml(unitStatus)}
-                </span>
-            `;
-            card.onclick = () => openModal(unit);
-            grid.appendChild(card);
-        });
-    }
-    
-    // Simple XSS protection
     function escapeHtml(str) {
         if (!str) return '';
         return str.replace(/[&<>]/g, function(m) {
@@ -358,11 +394,135 @@
         });
     }
 
+    async function loadPendingApprovals() {
+        try {
+            const res = await fetch(`${API_URL}/payments/pending-approvals`).catch(() => ({ ok: false }));
+            if (res.ok) {
+                const pending = await res.json();
+                pendingApprovalsCount = pending.length;
+                document.getElementById('pending-approvals').innerText = pendingApprovalsCount;
+            }
+        } catch (err) {
+            console.error('Error loading pending approvals:', err);
+        }
+    }
+
+    function renderUnits(units) {
+        const grid = document.getElementById('units-grid');
+        if (!grid) return;
+        grid.innerHTML = '';
+        units.forEach(unit => {
+            const isOccupied = unit.tenant_name && unit.tenant_name.trim() !== "";
+            const hasPendingPayment = unit.payment_status === 'pending' || (unit.total_bill > 0 && unit.payment_requested);
+            
+            const card = document.createElement('div');
+            card.className = `unit-card ${!isOccupied ? 'vacant' : ''} ${hasPendingPayment && isOccupied ? 'payment-pending' : ''}`;
+            
+            const currentBill = unit.total_bill ? Number(unit.total_bill).toLocaleString() : '0';
+            const unitStatus = unit.status || (isOccupied ? 'Occupied' : 'Vacant');
+            const floorLabel = Number(unit.floor) === 0 ? 'Ground Floor' : `Floor ${unit.floor ?? '-'}`;
+
+            card.innerHTML = `
+                <div class="unit-id">${escapeHtml(unit.id)}</div>
+                <div class="unit-name">${isOccupied ? escapeHtml(unit.tenant_name) : 'AVAILABLE'}</div>
+                <div class="unit-sub">${escapeHtml(floorLabel)}</div>
+                <div class="unit-sub">${isOccupied ? 'Phone: ' + escapeHtml(unit.tenant_phone || 'N/A') : ''}</div>
+                <div class="unit-sub" style="display: flex; align-items: center; flex-wrap: wrap; gap: 5px;">
+                    ${isOccupied ? 'Bill: KES ' + currentBill : 'Vacant Unit'}
+                    ${hasPendingPayment && isOccupied ? '<span class="pending-badge"><i class="fas fa-clock"></i> Pending Approval</span>' : ''}
+                </div>
+                <span class="badge ${isOccupied ? 'badge-pending' : 'badge-vacant'}">
+                    ${escapeHtml(unitStatus)}
+                </span>
+            `;
+            
+            // Add manual payment button for occupied units with balance
+            if (isOccupied && Number(unit.total_bill) > 0) {
+                const btnContainer = document.createElement('div');
+                btnContainer.style.marginTop = '8px';
+                btnContainer.innerHTML = `
+                    <button class="btn-manual-payment" onclick="event.stopPropagation(); openManualPaymentModal('${unit.id}', '${escapeHtml(unit.tenant_name)}', ${unit.total_bill})">
+                        <i class="fas fa-hand-holding-usd"></i> Mark as Paid
+                    </button>
+                `;
+                card.appendChild(btnContainer);
+            }
+            
+            card.onclick = () => openModal(unit);
+            grid.appendChild(card);
+        });
+    }
+
     function updateStats(units) {
         const occupied = units.filter(u => u.tenant_name && u.tenant_name.trim() !== "").length;
         const revenue = units.reduce((acc, u) => acc + (Number(u.total_bill) || 0), 0);
         document.getElementById('occ-count').innerText = occupied;
         document.getElementById('total-revenue').innerText = "KES " + revenue.toLocaleString();
+    }
+
+    // Manual Payment Modal Functions
+    let manualPaymentUnit = null;
+    
+    function openManualPaymentModal(unitId, tenantName, currentBalance) {
+        manualPaymentUnit = unitId;
+        document.getElementById('manualUnitId').innerText = unitId;
+        document.getElementById('manualTenantName').innerText = tenantName;
+        document.getElementById('manualBalance').innerHTML = `KES ${Number(currentBalance).toLocaleString()}`;
+        document.getElementById('paymentAmount').value = currentBalance;
+        document.getElementById('transactionRef').value = '';
+        document.getElementById('manualMsg').innerHTML = '';
+        document.getElementById('manualPaymentModal').style.display = 'flex';
+    }
+    
+    function closeManualModal() {
+        document.getElementById('manualPaymentModal').style.display = 'none';
+        manualPaymentUnit = null;
+    }
+    
+    async function submitManualPayment() {
+        const amount = document.getElementById('paymentAmount').value;
+        const transactionRef = document.getElementById('transactionRef').value.trim();
+        
+        if (!amount || Number(amount) <= 0) {
+            document.getElementById('manualMsg').innerHTML = '<span style="color:#ef4444;">Please enter a valid amount</span>';
+            return;
+        }
+        
+        const submitBtn = event.target;
+        const originalText = submitBtn.innerHTML;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+        submitBtn.disabled = true;
+        
+        try {
+            const res = await fetch(`${API_URL}/payments/manual`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    unitId: manualPaymentUnit,
+                    amount: Number(amount),
+                    transactionRef: transactionRef || `MANUAL-${Date.now()}`,
+                    paymentMethod: 'manual'
+                })
+            });
+            
+            const result = await res.json();
+            
+            if (res.ok) {
+                document.getElementById('manualMsg').innerHTML = '<span style="color:#10b981;">✅ Payment approved successfully!</span>';
+                setTimeout(() => {
+                    closeManualModal();
+                    init(); // Refresh the dashboard
+                }, 1500);
+            } else {
+                document.getElementById('manualMsg').innerHTML = `<span style="color:#ef4444;">❌ Error: ${result.error || 'Failed to process payment'}</span>`;
+            }
+        } catch (err) {
+            console.error('Manual payment error:', err);
+            document.getElementById('manualMsg').innerHTML = '<span style="color:#ef4444;">❌ Connection error. Please try again.</span>';
+        } finally {
+            submitBtn.innerHTML = originalText;
+            submitBtn.disabled = false;
+        }
     }
 
     async function registerTenant() {
@@ -417,14 +577,12 @@
 
     function openModal(unit) {
         if(!(unit.tenant_name && unit.tenant_name.trim() !== "")) {
-            // Switch to onboard section and fill unit ID
             dashboardSection.style.display = 'none';
             onboardSection.style.display = 'block';
             document.querySelector('.nav-item[data-section="onboard"]').classList.add('active');
             document.querySelector('.nav-item[data-section="dashboard"]').classList.remove('active');
             document.getElementById('obUnit').value = unit.id;
             document.getElementById('obName').focus();
-            // Scroll to onboard section
             onboardSection.scrollIntoView({ behavior: 'smooth' });
             return;
         }
@@ -500,13 +658,7 @@
                 const shouldSendSms = document.getElementById('sendStatementSms')?.checked;
                 if (shouldSendSms) {
                     try {
-                        const smsRes = await fetch(`${API_URL}/notifications/units/${selectedUnit.id}/statement`, { method: 'POST' });
-                        if (!smsRes.ok) {
-                            const smsErr = await smsRes.json().catch(() => ({}));
-                            alert(`Bill saved, but SMS was not queued: ${smsErr.error || 'Unknown error'}`);
-                        } else {
-                            console.log('SMS notification sent');
-                        }
+                        await fetch(`${API_URL}/notifications/units/${selectedUnit.id}/statement`, { method: 'POST' });
                     } catch (smsError) {
                         console.error('SMS send error:', smsError);
                     }
@@ -539,7 +691,6 @@
     init();
     startSessionMonitor();
     
-    // Log successful dashboard access
     console.log('✓ Dashboard loaded successfully at:', new Date().toISOString());
 </script>
 </body>
