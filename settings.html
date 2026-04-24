@@ -117,14 +117,9 @@
     </main>
   </div>
 
+  <script src="api-config.js"></script>
   <script>
-    const API_URL = (() => {
-      const { protocol, hostname, port, origin } = window.location;
-      if (hostname === '127.0.0.1' || hostname === 'localhost') {
-        if (port && port !== '3000') return `${protocol}//${hostname}:3000/api`;
-      }
-      return `${origin}/api`;
-    })();
+    const API_URL = window.SAFTECH_API_URL;
 
     const el = (id) => document.getElementById(id);
     const msg = el("msg");

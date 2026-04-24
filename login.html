@@ -40,14 +40,9 @@
     <div id="successMsg" style="color:green; display:none; margin-top:15px; text-align:center; background:#dcfce7; padding:10px; border-radius:8px;"></div>
   </div>
 
+  <script src="api-config.js"></script>
   <script>
-    const API_URL = (() => {
-      const { protocol, hostname, port, origin } = window.location;
-      if (hostname === '127.0.0.1' || hostname === 'localhost') {
-        if (port && port !== '3000') return `${protocol}//${hostname}:3000/api`;
-      }
-      return `${origin}/api`;
-    })();
+    const API_URL = window.SAFTECH_API_URL;
 
     function setText(id, message) {
       const el = document.getElementById(id);
