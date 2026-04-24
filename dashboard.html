@@ -479,6 +479,7 @@
         manualPaymentUnit = null;
     }
     
+    // FIXED: Manual payment function using /payments/approve endpoint
     async function submitManualPayment() {
         const amount = document.getElementById('paymentAmount').value;
         const transactionRef = document.getElementById('transactionRef').value.trim();
@@ -494,18 +495,20 @@
         submitBtn.disabled = true;
         
         try {
-            const res = await fetch(`${API_URL}/payments/manual`, {
+            // Use the existing payments/approve endpoint instead of /payments/manual
+            const res = await fetch(`${API_URL}/payments/approve`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
+                body: JSON.stringify({ 
                     unitId: manualPaymentUnit,
                     amount: Number(amount),
                     transactionRef: transactionRef || `MANUAL-${Date.now()}`,
-                    paymentMethod: 'manual'
+                    paymentMethod: 'manual',
+                    note: `Manual payment of KES ${amount} recorded by caretaker`
                 })
             });
             
-            const result = await res.json();
+            const result = await res.json().catch(() => ({}));
             
             if (res.ok) {
                 document.getElementById('manualMsg').innerHTML = '<span style="color:#10b981;">✅ Payment approved successfully!</span>';
