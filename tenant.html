@@ -55,6 +55,25 @@
       }
     }
 
+    /* Session timeout warning */
+    .session-timeout-warning {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      background: #fef3c7;
+      color: #92400e;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 12px;
+      z-index: 1000;
+      display: none;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .session-timeout-warning.warning {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
     /* Additional tenant portal specific styles */
     .row {
       display: flex;
@@ -149,6 +168,31 @@
       border-color: rgba(245,158,11,.28);
       color: #ffedd5;
     }
+    .badge.neutral {
+      background: rgba(148,163,184,.18);
+      border-color: rgba(148,163,184,.28);
+      color: #e2e8f0;
+    }
+
+    /* Loading spinner for payment */
+    .payment-loading {
+      opacity: 0.7;
+      pointer-events: none;
+    }
+    .spinner-small {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid #f3f3f3;
+      border-top: 2px solid #2563eb;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-right: 8px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
 
     /* Mobile Responsive Fixes */
     @media (max-width: 768px) {
@@ -202,33 +246,27 @@
         padding: 4px 8px;
       }
       
-      /* Make statement card full width on mobile */
       .panel[style*="flex:1"] {
         min-width: 100% !important;
         width: 100%;
       }
       
-      /* Fix button group layout */
       .no-print .btn {
         width: 100%;
       }
       
-      /* Better spacing for payment section */
       .panel.no-print {
         margin-bottom: 0;
       }
       
-      /* Transaction hint text */
       #txHint {
         font-size: 0.7rem;
       }
       
-      /* Payment message */
       #paymentMsg {
         font-size: 0.75rem;
       }
       
-      /* History list items */
       #historyList div {
         flex-direction: column;
         text-align: left;
@@ -239,7 +277,6 @@
         text-align: left;
       }
       
-      /* Logout button adjustment */
       .btn.ghost {
         padding: 8px 12px;
         font-size: 0.8rem;
@@ -282,7 +319,6 @@
       }
     }
 
-    /* Tablet specific adjustments */
     @media (min-width: 769px) and (max-width: 1024px) {
       .main-content {
         margin-left: 280px;
@@ -296,6 +332,8 @@
   </style>
 </head>
 <body>
+  <div id="sessionWarning" class="session-timeout-warning"></div>
+  
   <div id="welcome-overlay" class="welcome-overlay show">
     <div class="welcome-content">
       <div class="spinner"></div>
@@ -327,7 +365,7 @@
     <a href="settings.html" class="nav-item">
       <i class="fas fa-gear"></i> Settings
     </a>
-    <a href="login.html" class="nav-item">
+    <a href="#" class="nav-item" id="logoutBtn">
       <i class="fas fa-sign-out-alt"></i> Logout
     </a>
   </div>
@@ -363,11 +401,11 @@
         <div class="row" style="margin-top:15px;">
           <div class="grow">
             <label class="small muted">Unit ID (e.g., 1A)</label>
-            <input type="text" id="unitIdInput" placeholder="1A" style="text-transform:uppercase;">
+            <input type="text" id="unitIdInput" placeholder="1A" style="text-transform:uppercase;" autocomplete="off">
           </div>
           <div class="grow">
             <label class="small muted">Registered Phone</label>
-            <input type="tel" id="phoneInput" placeholder="07...">
+            <input type="tel" id="phoneInput" placeholder="07..." autocomplete="off">
           </div>
         </div>
         <button class="btn btn-primary" id="btnLogin" style="width:100%;margin-top:15px;">
@@ -399,7 +437,7 @@
 
             <div style="margin-top:15px;" class="no-print">
               <button class="btn btn-secondary" onclick="window.print()" style="width:100%;">
-                <i class="fa-solid fa-print"></i> Download Receipt
+                <i class="fa-solid fa-print"></i> Print Receipt
               </button>
             </div>
           </div>
@@ -434,8 +472,88 @@
   <script>
     const API_URL = window.SAFTECH_API_URL;
     const storage = sessionStorage;
+    let sessionCheckInterval = null;
+    let isSubmittingPayment = false;
 
-    // Mobile sidebar functionality
+    // ========== AUTHENTICATION CHECK ==========
+    (function checkAuthentication() {
+        const role = localStorage.getItem('saftech_role');
+        const loginTime = localStorage.getItem('saftech_login_time');
+        const currentPage = window.location.pathname.split('/').pop();
+        
+        // If caretaker tries to access tenant portal, redirect to dashboard
+        if (role === 'caretaker') {
+            console.warn('Caretaker attempted to access tenant portal');
+            window.location.href = 'dashboard.html';
+            return;
+        }
+        
+        // Check if session is too old (optional: 8 hour timeout)
+        if (role === 'tenant' && loginTime) {
+            const elapsed = Date.now() - parseInt(loginTime);
+            const eightHours = 8 * 60 * 60 * 1000;
+            if (elapsed > eightHours) {
+                console.warn('Session expired due to age');
+                window.logout();
+                return;
+            }
+        }
+        
+        console.log('✓ Tenant portal authenticated');
+    })();
+
+    // ========== SESSION MANAGEMENT ==========
+    function startSessionMonitor() {
+        let inactivityTime = 0;
+        const sessionTimeout = 30 * 60 * 1000; // 30 minutes
+        
+        function resetInactivityTimer() {
+            inactivityTime = 0;
+            const warningEl = document.getElementById('sessionWarning');
+            warningEl.style.display = 'none';
+        }
+        
+        function checkInactivity() {
+            if (document.getElementById('mainDashboard').style.display !== 'block') {
+                return; // Don't monitor if not logged in
+            }
+            
+            inactivityTime += 1000;
+            const remaining = sessionTimeout - inactivityTime;
+            
+            if (remaining <= 60000 && remaining > 0) { // Last minute warning
+                const warningEl = document.getElementById('sessionWarning');
+                warningEl.innerHTML = `<i class="fas fa-clock"></i> Session expires in ${Math.ceil(remaining/1000)} seconds`;
+                warningEl.style.display = 'block';
+                warningEl.classList.add('warning');
+            } else if (remaining <= 0) {
+                // Session expired
+                alert('Your session has expired due to inactivity. Please login again.');
+                window.logout();
+            }
+        }
+        
+        // Reset timer on user activity
+        const events = ['mousedown', 'keydown', 'scroll', 'touchstart', 'click'];
+        events.forEach(event => {
+            document.addEventListener(event, resetInactivityTimer);
+        });
+        
+        sessionCheckInterval = setInterval(checkInactivity, 1000);
+    }
+
+    // ========== LOGOUT FUNCTIONALITY ==========
+    function handleLogout() {
+        if (sessionCheckInterval) {
+            clearInterval(sessionCheckInterval);
+        }
+        storage.clear();
+        localStorage.removeItem('saftech_role');
+        localStorage.removeItem('saftech_login_time');
+        window.location.href = 'index.html';
+    }
+
+    // ========== MOBILE SIDEBAR ==========
     const mobileToggle = document.getElementById('mobileMenuToggle');
     const sidebar = document.getElementById('sidebar');
     const mobileOverlay = document.getElementById('mobileOverlay');
@@ -456,26 +574,55 @@
         });
     }
 
+    // ========== HELPER FUNCTIONS ==========
     const formatKES = (amt) => `KES ${Number(amt || 0).toLocaleString()}`;
+    
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/[&<>]/g, function(m) {
+            if (m === '&') return '&amp;';
+            if (m === '<') return '&lt;';
+            if (m === '>') return '&gt;';
+            return m;
+        });
+    }
 
     const extractTxCode = (text) => {
       const match = text.match(/\b[A-Z0-9]{10,12}\b/);
       return match ? match[0] : null;
     };
 
+    // ========== LOGIN FUNCTIONALITY ==========
     async function performLogin() {
       const unitId = document.getElementById('unitIdInput').value.trim().toUpperCase();
       const phone = document.getElementById('phoneInput').value.trim();
 
-      if(!unitId || !phone) return alert("Please enter both Unit ID and Phone Number.");
+      if(!unitId || !phone) {
+        document.getElementById('loginError').textContent = "Please enter both Unit ID and Phone Number.";
+        return;
+      }
+
+      const loginBtn = document.getElementById('btnLogin');
+      const originalText = loginBtn.innerHTML;
+      loginBtn.innerHTML = '<span class="spinner-small"></span> Verifying...';
+      loginBtn.disabled = true;
 
       try {
         const response = await fetch(`${API_URL}/units`);
+        if (!response.ok) throw new Error('Failed to fetch units');
         const units = await response.json();
         const unit = units.find(u => u.id.toUpperCase() === unitId && u.tenant_phone === phone);
 
         if (unit) {
+          // Check if unit has a tenant
+          if (!unit.tenant_name || unit.tenant_name.trim() === "") {
+            document.getElementById('loginError').textContent = "This unit is not currently occupied. Please contact management.";
+            return;
+          }
+          
           storage.setItem('activeUnit', JSON.stringify(unit));
+          localStorage.setItem("saftech_role", "tenant");
+          localStorage.setItem("saftech_login_time", Date.now().toString());
           showDashboard(unit);
         } else {
           document.getElementById('loginError').textContent = "Details do not match. Please contact management.";
@@ -483,12 +630,17 @@
       } catch (err) {
         console.error("Login Error:", err);
         document.getElementById('loginError').textContent = "Connection error. Please try again.";
+      } finally {
+        loginBtn.innerHTML = originalText;
+        loginBtn.disabled = false;
       }
     }
 
+    // ========== LOAD PAYMENT HISTORY ==========
     async function loadHistory(unitId) {
       try {
         const response = await fetch(`${API_URL}/payments/history/${unitId}`);
+        if (!response.ok) throw new Error('Failed to load history');
         const history = await response.json();
         const container = document.getElementById('historyList');
 
@@ -511,7 +663,7 @@
             </div>
             <div>
               <div style="color: #00d1b2; font-weight: bold; font-size: 0.9em;">${formatKES(bill.total_amount)}</div>
-              <div class="badge ${statusClass}" style="font-size: 0.6em; padding: 2px 8px; margin-top: 4px;">${statusLabel}</div>
+              <div class="badge ${statusClass}" style="font-size: 0.6em; padding: 2px 8px; margin-top: 4px;">${escapeHtml(statusLabel)}</div>
             </div>
           </div>
         `;
@@ -522,13 +674,14 @@
       }
     }
 
+    // ========== SHOW DASHBOARD ==========
     function showDashboard(unit) {
       document.getElementById('loginSection').style.display = 'none';
       document.getElementById('mainDashboard').style.display = 'block';
       
       document.getElementById('tenantInfo').innerHTML = `
-        <strong>Tenant:</strong> ${unit.tenant_name}<br>
-        <strong>Unit:</strong> ${unit.id} | <strong>Phone:</strong> ${unit.tenant_phone}<br>
+        <strong>Tenant:</strong> ${escapeHtml(unit.tenant_name)}<br>
+        <strong>Unit:</strong> ${escapeHtml(unit.id)} | <strong>Phone:</strong> ${escapeHtml(unit.tenant_phone)}<br>
         <strong>Last Updated:</strong> ${new Date(unit.updated_at).toLocaleDateString()}
       `;
 
@@ -547,9 +700,18 @@
       badge.className = `badge ${isDue ? 'warning' : 'success'}`;
 
       loadHistory(unit.id);
+      startSessionMonitor();
+      
+      console.log(`✓ Tenant dashboard loaded for ${unit.tenant_name} (Unit: ${unit.id})`);
     }
 
-    document.getElementById('btnSubmitPayment').addEventListener('click', async () => {
+    // ========== SUBMIT PAYMENT ==========
+    async function submitPayment() {
+      if (isSubmittingPayment) {
+        document.getElementById('paymentMsg').innerHTML = "<span style='color:#ff4d4d'>Please wait, payment already submitting...</span>";
+        return;
+      }
+      
       const sms = document.getElementById('mpesaSms').value.trim();
       const tx = extractTxCode(sms);
       const imageFile = document.getElementById('receiptImage').files?.[0];
@@ -561,8 +723,15 @@
       }
       if (!activeUnit) {
         document.getElementById('paymentMsg').innerHTML = "<span style='color:#ff4d4d'>Session expired. Please login again.</span>";
+        setTimeout(() => window.logout(), 2000);
         return;
       }
+
+      isSubmittingPayment = true;
+      const submitBtn = document.getElementById('btnSubmitPayment');
+      const originalText = submitBtn.innerHTML;
+      submitBtn.innerHTML = '<span class="spinner-small"></span> Submitting...';
+      submitBtn.disabled = true;
 
       const unit = JSON.parse(activeUnit);
       try {
@@ -581,14 +750,37 @@
         if (!res.ok) {
           throw new Error(result.error || "Failed to submit payment proof.");
         }
-        const txLabel = tx ? `Code <b>${tx}</b>` : 'Your payment proof';
+        const txLabel = tx ? `Code <b>${escapeHtml(tx)}</b>` : 'Your payment proof';
         const imageNote = result.image_uploaded ? " Screenshot uploaded." : " No screenshot uploaded.";
-        document.getElementById('paymentMsg').innerHTML = `<span style='color:#00d1b2'>Success! ${txLabel} submitted for review.${imageNote}</span>`;
+        document.getElementById('paymentMsg').innerHTML = `<span style='color:#00d1b2'>✓ Success! ${txLabel} submitted for review.${imageNote}</span>`;
         document.getElementById('mpesaSms').value = "";
         document.getElementById('receiptImage').value = "";
+        document.getElementById('txHint').textContent = "";
+        
+        // Refresh the page after successful payment to update statement
+        setTimeout(() => {
+          location.reload();
+        }, 2000);
       } catch (err) {
-        document.getElementById('paymentMsg').innerHTML = `<span style='color:#ff4d4d'>${err.message}</span>`;
+        console.error('Payment submission error:', err);
+        document.getElementById('paymentMsg').innerHTML = `<span style='color:#ff4d4d'>❌ ${escapeHtml(err.message)}</span>`;
+      } finally {
+        isSubmittingPayment = false;
+        submitBtn.innerHTML = originalText;
+        submitBtn.disabled = false;
       }
+    }
+
+    // ========== EVENT LISTENERS ==========
+    document.getElementById('btnSubmitPayment').addEventListener('click', submitPayment);
+    
+    document.getElementById('logoutBtn').addEventListener('click', (e) => {
+      e.preventDefault();
+      handleLogout();
+    });
+    
+    document.getElementById('btnLogout').addEventListener('click', () => {
+      handleLogout();
     });
 
     document.getElementById('mpesaSms').addEventListener('input', (e) => {
@@ -596,15 +788,36 @@
       document.getElementById('txHint').textContent = code ? `Detected Code: ${code}` : "";
     });
 
-    document.getElementById('btnLogout').addEventListener('click', () => {
-      storage.clear();
-      location.reload();
-    });
+    // Handle Enter key for login
+    function handleLoginEnter(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        performLogin();
+      }
+    }
+    
+    document.getElementById('unitIdInput').addEventListener('keypress', handleLoginEnter);
+    document.getElementById('phoneInput').addEventListener('keypress', handleLoginEnter);
 
+    // ========== INITIALIZATION ==========
     window.addEventListener('load', () => {
-      setTimeout(() => document.getElementById('welcome-overlay').classList.remove('show'), 800);
+      setTimeout(() => {
+        const overlay = document.getElementById('welcome-overlay');
+        if(overlay) overlay.classList.remove('show');
+      }, 800);
+      
       const savedUnit = storage.getItem('activeUnit');
-      if(savedUnit) showDashboard(JSON.parse(savedUnit));
+      const role = localStorage.getItem('saftech_role');
+      
+      if(savedUnit && role === 'tenant') {
+        try {
+          showDashboard(JSON.parse(savedUnit));
+        } catch (e) {
+          console.error('Failed to parse saved unit:', e);
+        }
+      } else if (role === 'caretaker') {
+        window.location.href = 'dashboard.html';
+      }
     });
 
     document.getElementById('btnLogin').addEventListener('click', performLogin);
