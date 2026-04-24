@@ -631,13 +631,15 @@
       return match ? match[0] : null;
     };
 
-    // Get status badge HTML
+    // Get status badge HTML - FIXED to properly show rejected status
     function getStatusBadge(status) {
-        const statusLower = String(status).toLowerCase();
-        if (statusLower === 'approved' || statusLower === 'paid') {
+        const statusLower = String(status || '').toLowerCase();
+        if (statusLower === 'approved') {
             return '<span class="status-badge status-approved"><i class="fas fa-check-circle"></i> Approved</span>';
         } else if (statusLower === 'rejected') {
             return '<span class="status-badge status-rejected"><i class="fas fa-times-circle"></i> Rejected</span>';
+        } else if (statusLower === 'paid') {
+            return '<span class="status-badge status-approved"><i class="fas fa-check-circle"></i> Paid</span>';
         } else {
             return '<span class="status-badge status-pending"><i class="fas fa-clock"></i> Pending Review</span>';
         }
@@ -686,95 +688,68 @@
       }
     }
 
-    // ========== LOAD PAYMENT HISTORY WITH VERIFICATION STATUS ==========
+    // ========== LOAD PAYMENT HISTORY WITH CORRECT STATUS ==========
     async function loadHistory(unitId) {
       try {
-        // Fetch both payment history and upload history
-        const [paymentsRes, uploadsRes] = await Promise.all([
-          fetch(`${API_URL}/payments/history/${unitId}`),
-          fetch(`${API_URL}/payments/uploads/unit/${unitId}`).catch(() => ({ ok: false }))
-        ]);
-        
-        let payments = [];
-        if (paymentsRes.ok) {
-          payments = await paymentsRes.json();
-        }
+        // Fetch upload history (payment submissions)
+        const uploadsRes = await fetch(`${API_URL}/payments/uploads/unit/${unitId}`).catch(() => ({ ok: false }));
         
         let uploads = [];
         if (uploadsRes.ok) {
           uploads = await uploadsRes.json();
+          console.log('Uploads with statuses:', uploads.map(u => ({ id: u.id, status: u.status })));
         }
         
         const container = document.getElementById('historyList');
         
-        // Combine and sort by date (newest first)
-        const allRecords = [
-          ...payments.map(p => ({ ...p, type: 'bill', date: p.created_at, amount: p.total_amount })),
-          ...uploads.map(u => ({ ...u, type: 'upload', date: u.created_at, amount: null }))
-        ].sort((a, b) => new Date(b.date) - new Date(a.date));
-
-        if (allRecords.length === 0) {
+        if (uploads.length === 0) {
           container.innerHTML = `<p class="muted small">No payment history yet.</p>`;
           return;
         }
 
-        container.innerHTML = allRecords.map(record => {
-          if (record.type === 'bill') {
-            const isPaid = String(record.status).toLowerCase() === 'paid';
-            const statusClass = isPaid ? 'success' : 'warning';
-            const statusLabel = isPaid ? 'PAID' : (record.status || 'PENDING').toUpperCase();
-            return `
-              <div style="padding: 12px 0; border-bottom: 1px solid var(--border);">
-                <div class="row" style="justify-content: space-between; align-items: flex-start;">
-                  <div>
-                    <div class="small" style="font-weight: bold;">
-                      📄 Bill - ${new Date(record.date).toLocaleDateString('en-GB', {month: 'long', year: 'numeric'})}
-                    </div>
-                    <div class="muted" style="font-size: 0.7em;">Ref: SAF-${record.id}</div>
+        // Sort by date (newest first)
+        uploads.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+        container.innerHTML = uploads.map(record => {
+          // Get the correct status directly from database
+          const status = record.status || 'pending';
+          
+          return `
+            <div style="padding: 12px 0; border-bottom: 1px solid var(--border);">
+              <div class="row" style="justify-content: space-between; align-items: flex-start;">
+                <div>
+                  <div class="small" style="font-weight: bold;">
+                    💳 Payment Submission - ${new Date(record.created_at).toLocaleDateString()}
                   </div>
-                  <div style="text-align: right;">
-                    <div style="color: #00d1b2; font-weight: bold;">${formatKES(record.amount)}</div>
-                    <div class="badge ${statusClass}" style="font-size: 0.6em; padding: 2px 8px; margin-top: 4px;">${escapeHtml(statusLabel)}</div>
-                  </div>
-                </div>
-              </div>
-            `;
-          } else {
-            // Upload record - show verification status
-            return `
-              <div style="padding: 12px 0; border-bottom: 1px solid var(--border);">
-                <div class="row" style="justify-content: space-between; align-items: flex-start;">
-                  <div>
-                    <div class="small" style="font-weight: bold;">
-                      💳 Payment Submission - ${new Date(record.date).toLocaleDateString()}
-                    </div>
-                    <div class="muted" style="font-size: 0.7em;">
-                      ${record.tx_code ? `Code: ${escapeHtml(record.tx_code)}` : 'Manual Entry'}
-                    </div>
-                  </div>
-                  <div style="text-align: right;">
-                    ${getStatusBadge(record.status)}
+                  <div class="muted" style="font-size: 0.7em;">
+                    ${record.tx_code ? `Code: ${escapeHtml(record.tx_code)}` : 'Manual Entry'}
                   </div>
                 </div>
-                ${record.status === 'rejected' ? `
-                  <div class="payment-info-box" style="margin-top: 8px;">
-                    <div class="label"><i class="fas fa-info-circle"></i> Reason for rejection:</div>
-                    <div class="small" style="color: #f87171;">Your payment submission was rejected. Please contact management or submit a new payment.</div>
-                  </div>
-                ` : record.status === 'pending' ? `
-                  <div class="payment-info-box" style="margin-top: 8px;">
-                    <div class="label"><i class="fas fa-hourglass-half"></i> Awaiting verification:</div>
-                    <div class="small">Your payment is being reviewed by the caretaker. This usually takes 24-48 hours.</div>
-                  </div>
-                ` : record.status === 'approved' ? `
-                  <div class="payment-info-box" style="margin-top: 8px;">
-                    <div class="label"><i class="fas fa-check-circle"></i> Verification complete:</div>
-                    <div class="small" style="color: #10b981;">Your payment has been approved and credited to your account.</div>
-                  </div>
-                ` : ''}
+                <div style="text-align: right;">
+                  ${getStatusBadge(status)}
+                </div>
               </div>
-            `;
-          }
+              <div class="small" style="margin-top: 6px; white-space: pre-wrap; background: rgba(0,0,0,0.1); padding: 8px; border-radius: 6px;">
+                ${escapeHtml(record.message || 'No message')}
+              </div>
+              ${status === 'rejected' ? `
+                <div class="payment-info-box" style="margin-top: 8px;">
+                  <div class="label"><i class="fas fa-exclamation-triangle"></i> ❌ Payment Rejected:</div>
+                  <div class="small" style="color: #f87171;">Your payment submission was rejected. Please contact the caretaker or submit a new payment.</div>
+                </div>
+              ` : status === 'pending' ? `
+                <div class="payment-info-box" style="margin-top: 8px;">
+                  <div class="label"><i class="fas fa-hourglass-half"></i> ⏳ Awaiting Verification:</div>
+                  <div class="small">Your payment is being reviewed by the caretaker. You will be notified once approved.</div>
+                </div>
+              ` : status === 'approved' ? `
+                <div class="payment-info-box" style="margin-top: 8px;">
+                  <div class="label"><i class="fas fa-check-circle"></i> ✅ Payment Approved:</div>
+                  <div class="small" style="color: #10b981;">Your payment has been approved and your account balance has been updated.</div>
+                </div>
+              ` : ''}
+            </div>
+          `;
         }).join('');
       } catch (err) {
         console.error("History Error:", err);
@@ -795,6 +770,31 @@
         }
       } catch (err) {
         console.error('Error checking pending status:', err);
+      }
+    }
+
+    // ========== REFRESH UNIT DATA ==========
+    async function refreshUnitData(unitId) {
+      try {
+        const response = await fetch(`${API_URL}/units`);
+        if (response.ok) {
+          const units = await response.json();
+          const updatedUnit = units.find(u => u.id.toUpperCase() === unitId.toUpperCase());
+          if (updatedUnit) {
+            storage.setItem('activeUnit', JSON.stringify(updatedUnit));
+            // Update displayed balance
+            document.getElementById('displayTotal').textContent = formatKES(updatedUnit.total_bill || 0);
+            const isDue = Number(updatedUnit.total_bill) > 0;
+            const badge = document.getElementById('billStatusBadge');
+            badge.textContent = isDue ? "PAYMENT DUE" : "CLEARED";
+            badge.className = `badge ${isDue ? 'warning' : 'success'}`;
+            return updatedUnit;
+          }
+        }
+        return null;
+      } catch (err) {
+        console.error('Error refreshing unit data:', err);
+        return null;
       }
     }
 
