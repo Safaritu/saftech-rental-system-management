@@ -305,7 +305,7 @@ select option { background: #1e293b; color: white; }
   -webkit-text-fill-color: transparent;
 }
 
-/* ====== Unit Grid - HORIZONTAL on mobile ====== */
+/* ====== Unit Grid - VERTICAL SCROLLING on mobile ====== */
 .unit-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -420,34 +420,20 @@ select option { background: #1e293b; color: white; }
     padding: 70px 16px 20px 16px;
   }
   
-  /* HORIZONTAL SCROLL ON MOBILE */
+  /* VERTICAL SCROLL ON MOBILE - normal grid layout with vertical scrolling */
   .unit-grid {
-    display: flex;
-    overflow-x: auto;
-    scroll-snap-type: x mandatory;
-    gap: 14px;
-    padding-bottom: 12px;
-    -webkit-overflow-scrolling: touch;
-  }
-  
-  .unit-grid::-webkit-scrollbar {
-    height: 4px;
-  }
-  
-  .unit-grid::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 10px;
-  }
-  
-  .unit-grid::-webkit-scrollbar-thumb {
-    background: var(--primary);
-    border-radius: 10px;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    overflow-y: visible;
+    overflow-x: visible;
+    max-height: none;
+    padding-bottom: 0;
   }
   
   .unit-card {
-    flex: 0 0 auto;
-    width: 200px;
-    scroll-snap-align: start;
+    width: 100%;
+    flex: none;
   }
   
   .stats-container {
@@ -479,13 +465,25 @@ select option { background: #1e293b; color: white; }
   }
 }
 
+@media (max-width: 600px) {
+  .unit-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+}
+
 @media (max-width: 480px) {
   .main-content {
     padding: 60px 12px 16px 12px;
   }
   
+  .unit-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+  
   .unit-card {
-    width: 180px;
+    width: 100%;
   }
   
   .stat-value {
