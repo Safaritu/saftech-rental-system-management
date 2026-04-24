@@ -149,6 +149,150 @@
       border-color: rgba(245,158,11,.28);
       color: #ffedd5;
     }
+
+    /* Mobile Responsive Fixes */
+    @media (max-width: 768px) {
+      .main-content {
+        margin-left: 0 !important;
+        padding: 70px 12px 20px 12px !important;
+      }
+      
+      .row {
+        flex-direction: column;
+        gap: 12px;
+      }
+      
+      .row .grow {
+        width: 100%;
+      }
+      
+      .panel.pad {
+        padding: 14px;
+      }
+      
+      .h1 {
+        font-size: 1.1rem;
+      }
+      
+      .h2 {
+        font-size: 0.95rem;
+      }
+      
+      .line {
+        font-size: 0.85rem;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      
+      .break {
+        padding: 10px;
+      }
+      
+      .btn {
+        padding: 12px;
+        font-size: 0.85rem;
+      }
+      
+      #tenantInfo {
+        font-size: 0.75rem;
+      }
+      
+      .badge {
+        font-size: 0.65rem;
+        padding: 4px 8px;
+      }
+      
+      /* Make statement card full width on mobile */
+      .panel[style*="flex:1"] {
+        min-width: 100% !important;
+        width: 100%;
+      }
+      
+      /* Fix button group layout */
+      .no-print .btn {
+        width: 100%;
+      }
+      
+      /* Better spacing for payment section */
+      .panel.no-print {
+        margin-bottom: 0;
+      }
+      
+      /* Transaction hint text */
+      #txHint {
+        font-size: 0.7rem;
+      }
+      
+      /* Payment message */
+      #paymentMsg {
+        font-size: 0.75rem;
+      }
+      
+      /* History list items */
+      #historyList div {
+        flex-direction: column;
+        text-align: left;
+        gap: 8px;
+      }
+      
+      #historyList div > div:last-child {
+        text-align: left;
+      }
+      
+      /* Logout button adjustment */
+      .btn.ghost {
+        padding: 8px 12px;
+        font-size: 0.8rem;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .main-content {
+        padding: 60px 10px 16px 10px !important;
+      }
+      
+      .panel.pad {
+        padding: 12px;
+      }
+      
+      .line {
+        font-size: 0.8rem;
+      }
+      
+      .break .line:last-child {
+        font-size: 0.9rem;
+      }
+      
+      input, select, textarea, .btn {
+        font-size: 14px;
+      }
+      
+      .logo {
+        width: 36px;
+        height: 36px;
+        font-size: 1.2rem;
+      }
+      
+      .h1 {
+        font-size: 1rem;
+      }
+      
+      .muted.small {
+        font-size: 0.7rem;
+      }
+    }
+
+    /* Tablet specific adjustments */
+    @media (min-width: 769px) and (max-width: 1024px) {
+      .main-content {
+        margin-left: 280px;
+        padding: 20px;
+      }
+      
+      .row {
+        gap: 12px;
+      }
+    }
   </style>
 </head>
 <body>
@@ -191,7 +335,7 @@
   <!-- Mobile Overlay for sidebar -->
   <div class="mobile-overlay" id="mobileOverlay"></div>
 
-  <div class="main-content" style="margin-left: 280px; padding: 24px 28px;">
+  <div class="main-content">
     <div class="top-bar" style="margin-bottom: 24px;">
       <div>
         <h2 style="margin:0;">Tenant Portal</h2>
@@ -235,7 +379,7 @@
       <div id="mainDashboard" style="display:none; margin-top:15px;">
         <div class="row" style="align-items:stretch; gap:15px; flex-wrap: wrap;">
           
-          <div class="panel pad" style="flex:1; min-width: 320px;" id="printableReceipt">
+          <div class="panel pad" id="printableReceipt">
             <div class="row" style="justify-content:space-between; margin-bottom:10px;">
               <div class="h2"><i class="fa-solid fa-file-invoice-dollar"></i> Current Statement</div>
               <span class="badge neutral" id="billStatusBadge">---</span>
@@ -260,7 +404,7 @@
             </div>
           </div>
 
-          <div style="flex:1; min-width: 320px; display: flex; flex-direction: column; gap:15px;">
+          <div style="flex:1; min-width: 280px; display: flex; flex-direction: column; gap:15px;">
             <div class="panel pad no-print">
               <div class="h2"><i class="fa-solid fa-paper-plane"></i> Submit Payment</div>
               <textarea id="mpesaSms" placeholder="Paste full M-Pesa SMS here..." style="height:100px; margin-top:10px;"></textarea>
@@ -275,7 +419,7 @@
 
             <div class="panel pad no-print">
               <div class="h2"><i class="fa-solid fa-clock-rotate-left"></i> Payment History</div>
-              <div id="historyList" style="margin-top:10px; max-height: 250px; overflow-y: auto;">
+              <div id="historyList" style="margin-top:10px; max-height: 300px; overflow-y: auto;">
                 <p class="muted small">Loading history...</p>
               </div>
             </div>
@@ -358,16 +502,16 @@
           const statusClass = isPaid ? 'success' : 'warning';
           const statusLabel = isPaid ? 'PAID' : (bill.status || 'PENDING').toUpperCase();
           return `
-          <div style="padding: 10px 0; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+          <div style="padding: 10px 0; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
             <div>
               <div class="small" style="font-weight: bold;">
                 ${new Date(bill.created_at).toLocaleDateString('en-GB', {month: 'long', year: 'numeric'})}
               </div>
               <div class="muted" style="font-size: 0.75em;">Ref: SAF-${bill.id}</div>
             </div>
-            <div style="text-align: right;">
+            <div>
               <div style="color: #00d1b2; font-weight: bold; font-size: 0.9em;">${formatKES(bill.total_amount)}</div>
-              <div class="badge ${statusClass}" style="font-size: 0.6em; padding: 2px 5px;">${statusLabel}</div>
+              <div class="badge ${statusClass}" style="font-size: 0.6em; padding: 2px 8px; margin-top: 4px;">${statusLabel}</div>
             </div>
           </div>
         `;
