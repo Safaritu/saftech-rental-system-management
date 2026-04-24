@@ -631,7 +631,7 @@
       return match ? match[0] : null;
     };
 
-    // Get status badge HTML - FIXED to properly show rejected status
+    // Get status badge HTML
     function getStatusBadge(status) {
         const statusLower = String(status || '').toLowerCase();
         if (statusLower === 'approved') {
@@ -688,49 +688,101 @@
       }
     }
 
-    // ========== LOAD PAYMENT HISTORY WITH CORRECT STATUS ==========
-    async function loadHistory(unitId) {
+    // ========== LOAD PAYMENT HISTORY - FIXED ==========
+    async function loadHistory(unitId, tenantPhone) {
+      const container = document.getElementById('historyList');
+      container.innerHTML = '<p class="muted small"><i class="fas fa-spinner fa-spin"></i> Loading history...</p>';
+      
       try {
-        // Fetch upload history (payment submissions)
-        const uploadsRes = await fetch(`${API_URL}/payments/uploads/unit/${unitId}`).catch(() => ({ ok: false }));
+        // Try multiple endpoints to get payment history
+        let allRecords = [];
         
-        let uploads = [];
-        if (uploadsRes.ok) {
-          uploads = await uploadsRes.json();
-          console.log('Uploads with statuses:', uploads.map(u => ({ id: u.id, status: u.status })));
+        // Try 1: Get from tenant_updates via payments/uploads endpoint
+        try {
+          const uploadsRes = await fetch(`${API_URL}/payments/uploads`);
+          if (uploadsRes.ok) {
+            const allUploads = await uploadsRes.json();
+            // Filter by unit_id OR tenant_phone
+            const unitUploads = allUploads.filter(u => 
+              String(u.unit_id).toUpperCase() === unitId.toUpperCase() || 
+              u.tenant_phone === tenantPhone
+            );
+            allRecords.push(...unitUploads.map(u => ({ ...u, recordType: 'upload' })));
+            console.log(`Found ${unitUploads.length} upload records for unit ${unitId}`);
+          }
+        } catch (err) {
+          console.log('Uploads endpoint not available:', err);
         }
         
-        const container = document.getElementById('historyList');
+        // Try 2: Get from tenant_updates directly via custom endpoint
+        try {
+          const updatesRes = await fetch(`${API_URL}/tenant_updates/unit/${unitId}`);
+          if (updatesRes.ok) {
+            const updates = await updatesRes.json();
+            allRecords.push(...updates.map(u => ({ ...u, recordType: 'update' })));
+            console.log(`Found ${updates.length} update records for unit ${unitId}`);
+          }
+        } catch (err) {
+          console.log('Tenant updates endpoint not available:', err);
+        }
         
-        if (uploads.length === 0) {
-          container.innerHTML = `<p class="muted small">No payment history yet.</p>`;
+        // Try 3: Get from all tenant_updates and filter
+        try {
+          const allUpdatesRes = await fetch(`${API_URL}/tenant_updates`);
+          if (allUpdatesRes.ok) {
+            const allUpdates = await allUpdatesRes.json();
+            const unitUpdates = allUpdates.filter(u => 
+              String(u.unit_id).toUpperCase() === unitId.toUpperCase() || 
+              u.tenant_phone === tenantPhone
+            );
+            allRecords.push(...unitUpdates.map(u => ({ ...u, recordType: 'update' })));
+            console.log(`Found ${unitUpdates.length} updates from all updates for unit ${unitId}`);
+          }
+        } catch (err) {
+          console.log('All tenant updates endpoint not available:', err);
+        }
+        
+        // Remove duplicates based on id
+        const uniqueRecords = [];
+        const seenIds = new Set();
+        for (const record of allRecords) {
+          if (!seenIds.has(record.id)) {
+            seenIds.add(record.id);
+            uniqueRecords.push(record);
+          }
+        }
+        
+        if (uniqueRecords.length === 0) {
+          container.innerHTML = `<p class="muted small">No payment history yet. Your payment submissions will appear here.</p>`;
           return;
         }
 
         // Sort by date (newest first)
-        uploads.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        uniqueRecords.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-        container.innerHTML = uploads.map(record => {
-          // Get the correct status directly from database
+        container.innerHTML = uniqueRecords.map(record => {
           const status = record.status || 'pending';
+          const message = record.message || record.sms_text || 'No message provided';
+          const txCode = record.tx_code || (message.match(/\b[A-Z0-9]{10,12}\b/) || ['N/A'])[0];
+          const createdAt = record.created_at || record.submitted_at || new Date().toISOString();
           
           return `
             <div style="padding: 12px 0; border-bottom: 1px solid var(--border);">
               <div class="row" style="justify-content: space-between; align-items: flex-start;">
                 <div>
                   <div class="small" style="font-weight: bold;">
-                    💳 Payment Submission - ${new Date(record.created_at).toLocaleDateString()}
+                    💳 Payment Submission - ${new Date(createdAt).toLocaleDateString()}
                   </div>
                   <div class="muted" style="font-size: 0.7em;">
-                    ${record.tx_code ? `Code: ${escapeHtml(record.tx_code)}` : 'Manual Entry'}
+                    Code: ${escapeHtml(txCode)}
                   </div>
                 </div>
                 <div style="text-align: right;">
                   ${getStatusBadge(status)}
                 </div>
               </div>
-              <div class="small" style="margin-top: 6px; white-space: pre-wrap; background: rgba(0,0,0,0.1); padding: 8px; border-radius: 6px;">
-                ${escapeHtml(record.message || 'No message')}
+              <div class="small" style="margin-top: 6px; white-space: pre-wrap; background: rgba(0,0,0,0.1); padding: 8px; border-radius: 6px; word-break: break-word;">
+                ${escapeHtml(message.substring(0, 200))}${message.length > 200 ? '...' : ''}
               </div>
               ${status === 'rejected' ? `
                 <div class="payment-info-box" style="margin-top: 8px;">
@@ -751,21 +803,26 @@
             </div>
           `;
         }).join('');
+        
       } catch (err) {
         console.error("History Error:", err);
-        document.getElementById('historyList').innerHTML = `<p class="muted small">Error loading history.</p>`;
+        container.innerHTML = `<p class="muted small">Error loading history: ${err.message}</p>`;
       }
     }
 
     // ========== CHECK PENDING PAYMENT STATUS ==========
-    async function checkPendingPaymentStatus(unitId) {
+    async function checkPendingPaymentStatus(unitId, tenantPhone) {
       try {
-        const res = await fetch(`${API_URL}/payments/uploads/unit/${unitId}/pending`).catch(() => ({ ok: false }));
+        const res = await fetch(`${API_URL}/payments/uploads`).catch(() => ({ ok: false }));
         if (res.ok) {
-          const pending = await res.json();
+          const allUploads = await res.json();
+          const pending = allUploads.filter(u => 
+            (String(u.unit_id).toUpperCase() === unitId.toUpperCase() || u.tenant_phone === tenantPhone) && 
+            u.status === 'pending'
+          );
           if (pending && pending.length > 0) {
             const pendingStatus = document.getElementById('paymentMsg');
-            pendingStatus.innerHTML = `<span style='color:#f59e0b'><i class="fas fa-clock"></i> You have a pending payment awaiting review.</span>`;
+            pendingStatus.innerHTML = `<span style='color:#f59e0b'><i class="fas fa-clock"></i> You have ${pending.length} pending payment(s) awaiting review.</span>`;
           }
         }
       } catch (err) {
@@ -782,7 +839,6 @@
           const updatedUnit = units.find(u => u.id.toUpperCase() === unitId.toUpperCase());
           if (updatedUnit) {
             storage.setItem('activeUnit', JSON.stringify(updatedUnit));
-            // Update displayed balance
             document.getElementById('displayTotal').textContent = formatKES(updatedUnit.total_bill || 0);
             const isDue = Number(updatedUnit.total_bill) > 0;
             const badge = document.getElementById('billStatusBadge');
@@ -823,8 +879,9 @@
       badge.textContent = isDue ? "PAYMENT DUE" : "CLEARED";
       badge.className = `badge ${isDue ? 'warning' : 'success'}`;
 
-      await loadHistory(unit.id);
-      await checkPendingPaymentStatus(unit.id);
+      // Load history with both unitId and tenantPhone
+      await loadHistory(unit.id, unit.tenant_phone);
+      await checkPendingPaymentStatus(unit.id, unit.tenant_phone);
       startSessionMonitor();
       
       console.log(`✓ Tenant dashboard loaded for ${unit.tenant_name} (Unit: ${unit.id})`);
@@ -884,8 +941,8 @@
         
         // Refresh history to show the new pending submission
         setTimeout(() => {
-          loadHistory(unit.id);
-          checkPendingPaymentStatus(unit.id);
+          loadHistory(unit.id, unit.tenant_phone);
+          checkPendingPaymentStatus(unit.id, unit.tenant_phone);
         }, 1000);
         
       } catch (err) {
