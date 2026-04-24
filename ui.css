@@ -305,7 +305,7 @@ select option { background: #1e293b; color: white; }
   -webkit-text-fill-color: transparent;
 }
 
-/* ====== Unit Grid - VERTICAL SCROLLING on mobile ====== */
+/* ====== Unit Grid - Horizontal layout with vertical scrolling ====== */
 .unit-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
@@ -420,20 +420,18 @@ select option { background: #1e293b; color: white; }
     padding: 70px 16px 20px 16px;
   }
   
-  /* VERTICAL SCROLL ON MOBILE - normal grid layout with vertical scrolling */
+  /* HORIZONTAL LAYOUT (same as laptop) with VERTICAL SCROLLING */
   .unit-grid {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
     gap: 12px;
     overflow-y: visible;
     overflow-x: visible;
-    max-height: none;
-    padding-bottom: 0;
   }
   
   .unit-card {
     width: 100%;
-    flex: none;
+    min-width: 0;
   }
   
   .stats-container {
@@ -467,7 +465,7 @@ select option { background: #1e293b; color: white; }
 
 @media (max-width: 600px) {
   .unit-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
     gap: 10px;
   }
 }
@@ -478,12 +476,24 @@ select option { background: #1e293b; color: white; }
   }
   
   .unit-grid {
-    grid-template-columns: 1fr;
-    gap: 12px;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px;
   }
   
   .unit-card {
-    width: 100%;
+    padding: 12px;
+  }
+  
+  .unit-id {
+    font-size: 1rem;
+  }
+  
+  .unit-name {
+    font-size: 0.85rem;
+  }
+  
+  .unit-sub {
+    font-size: 0.7rem;
   }
   
   .stat-value {
