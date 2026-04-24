@@ -26,11 +26,11 @@
             <i class="fas fa-building"></i>
             <span>Saftech Pro</span>
         </div>
-        <a href="index.html" class="nav-item active" data-section="dashboard">
+        <a href="index.html" class="nav-item active">
             <i class="fas fa-th-large"></i> Dashboard
         </a>
-        <a href="tenant.html" class="nav-item" data-section="onboard">
-            <i class="fas fa-user-plus"></i> Tenats
+        <a href="tenant.html" class="nav-item">
+            <i class="fas fa-users"></i> Tenants
         </a>
         <a href="verify.html" class="nav-item">
             <i class="fas fa-check-double"></i> Verification
@@ -155,38 +155,6 @@
         });
     }
 
-    // Navigation between sections
-    const navItems = document.querySelectorAll('.nav-item');
-    const dashboardSection = document.getElementById('dashboard-section');
-    const onboardSection = document.getElementById('onboard-section');
-    
-    navItems.forEach(item => {
-        item.addEventListener('click', (e) => {
-            const section = item.getAttribute('data-section');
-            if (section === 'dashboard') {
-                e.preventDefault();
-                dashboardSection.style.display = 'block';
-                onboardSection.style.display = 'none';
-                navItems.forEach(nav => nav.classList.remove('active'));
-                item.classList.add('active');
-                // Close mobile sidebar on navigation
-                sidebar.classList.remove('mobile-open');
-                mobileOverlay.classList.remove('active');
-                document.body.style.overflow = '';
-            } else if (section === 'onboard') {
-                e.preventDefault();
-                dashboardSection.style.display = 'none';
-                onboardSection.style.display = 'block';
-                navItems.forEach(nav => nav.classList.remove('active'));
-                item.classList.add('active');
-                // Close mobile sidebar on navigation
-                sidebar.classList.remove('mobile-open');
-                mobileOverlay.classList.remove('active');
-                document.body.style.overflow = '';
-            }
-        });
-    });
-
     async function safeJson(response, fallback = null) {
         const contentType = response.headers.get('content-type') || '';
         if (!response.ok || !contentType.includes('application/json')) return fallback;
@@ -282,21 +250,28 @@
                 msg.innerText = "✅ Successfully saved!";
                 document.getElementById('obUnit').value = '';
                 document.getElementById('obName').value = '';
+                document.getElementById('obRent').value = '';
+                document.getElementById('obPhone').value = '';
                 document.getElementById('obDeposit').value = '';
                 init();
+                setTimeout(() => {
+                    msg.innerText = '';
+                }, 3000);
+            } else {
+                msg.innerText = "❌ Error saving tenant";
             }
-        } catch (err) { console.error(err); }
+        } catch (err) { 
+            console.error(err);
+            msg.innerText = "❌ Connection error";
+        }
     }
 
     function openModal(unit) {
         if(!(unit.tenant_name && unit.tenant_name.trim() !== "")) {
-            // Switch to onboard section and fill unit ID
-            dashboardSection.style.display = 'none';
+            // Scroll to onboard section and fill unit ID
+            const onboardSection = document.getElementById('onboard-section');
             onboardSection.style.display = 'block';
-            document.querySelector('.nav-item[data-section="onboard"]').classList.add('active');
-            document.querySelector('.nav-item[data-section="dashboard"]').classList.remove('active');
             document.getElementById('obUnit').value = unit.id;
-            // Scroll to onboard section
             onboardSection.scrollIntoView({ behavior: 'smooth' });
             return;
         }
@@ -371,31 +346,39 @@
                 alert("✅ Bill Successfully Saved for " + selectedUnit.id);
                 const shouldSendSms = document.getElementById('sendStatementSms')?.checked;
                 if (shouldSendSms) {
-                    const smsRes = await fetch(`${API_URL}/notifications/units/${selectedUnit.id}/statement`, { method: 'POST' });
-                    if (!smsRes.ok) {
-                        const smsErr = await smsRes.json().catch(() => ({}));
-                        alert(`Bill saved, but SMS was not queued: ${smsErr.error || 'Unknown error'}`);
+                    try {
+                        const smsRes = await fetch(`${API_URL}/notifications/units/${selectedUnit.id}/statement`, { method: 'POST' });
+                        if (!smsRes.ok) {
+                            console.log("SMS not sent");
+                        }
+                    } catch(e) {
+                        console.log("SMS service unavailable");
                     }
                 }
                 closeModal();
                 init();
             } else {
-                const err = await res.json();
-                alert("Error: " + err.error);
+                const err = await res.json().catch(() => ({}));
+                alert("Error: " + (err.error || "Unknown error"));
             }
         } catch (err) {
             console.error("Submission Error:", err);
+            alert("Error submitting bill. Please try again.");
         }
     }
 
-    function closeModal() { document.getElementById('readingModal').style.display = 'none'; }
+    function closeModal() { 
+        document.getElementById('readingModal').style.display = 'none'; 
+    }
     
     function filterUnits() {
         const term = document.getElementById('searchInput').value.toLowerCase();
-        renderUnits(allUnits.filter(u => 
-            u.id.toLowerCase().includes(term) || 
-            (u.tenant_name && u.tenant_name.toLowerCase().includes(term))
-        ));
+        if (allUnits.length > 0) {
+            renderUnits(allUnits.filter(u => 
+                u.id.toLowerCase().includes(term) || 
+                (u.tenant_name && u.tenant_name.toLowerCase().includes(term))
+            ));
+        }
     }
 
     init();
