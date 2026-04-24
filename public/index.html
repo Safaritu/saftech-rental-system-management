@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Saftech Rental Manager | Pro Dashboard</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="stylesheet" href="ui.css">
+</head>
+<body>
+    <div id="welcome-overlay" class="welcome-overlay show">
+        <div class="welcome-content">
+            <div class="spinner"></div>
+            <h1>SAFTECH RESOLUTIONS</h1>
+            <p id="loading-text">Connecting to property database...</p>
+        </div>
+    </div>
+
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <i class="fas fa-building"></i>
+            <span>Saftech Pro</span>
+        </div>
+        <a href="#" class="nav-item active"><i class="fas fa-th-large"></i> Dashboard</a>
+        <a href="#onboard-section" class="nav-item"><i class="fas fa-user-plus"></i> Onboard</a>
+        <a href="verify.html" class="nav-item"><i class="fas fa-check-double"></i> Verification</a>
+        <a href="settings.html" class="nav-item"><i class="fas fa-gear"></i> Settings</a>
+        <a href="login.html" class="nav-item"><i class="fas fa-sign-out-alt"></i> Logout</a>
+    </div>
+
+    <div class="main-content">
+        <div class="top-bar">
+            <div>
+                <h2 style="margin:0;">Dashboard Overview</h2>
+                <span id="server-status" style="font-size:0.8rem; color:red;">● Offline</span>
+            </div>
+            <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" id="searchInput" placeholder="Search Unit or Tenant..." onkeyup="filterUnits()">
+            </div>
+        </div>
+
+        <div class="stats-container">
+            <div class="card pad">
+                <small>Occupied Units</small>
+                <div class="stat-value" id="occ-count">0</div>
+            </div>
+            <div class="card pad">
+                <small>Total Monthly Revenue</small>
+                <div class="stat-value" id="total-revenue">KES 0</div>
+            </div>
+        </div>
+
+        <h3>Building Grid</h3>
+        <div id="units-grid" class="unit-grid"></div>
+
+        <div id="onboard-section" class="card pad" style="margin-top:20px;">
+            <h3><i class="fas fa-user-plus"></i> Onboard New Tenant</h3>
+            <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:15px; margin-top:15px;">
+                <input type="text" id="obUnit" placeholder="Unit ID (e.g. 1A)" style="text-transform:uppercase;">
+                <input type="text" id="obName" placeholder="Full Tenant Name">
+                <input type="text" id="obPhone" placeholder="Phone Number">
+                <input type="number" id="obRent" placeholder="Monthly Base Rent">
+                <input type="number" id="obDeposit" placeholder="Move-in Deposit">
+            </div>
+            <button class="btn btn-primary" style="margin-top:15px;" onclick="registerTenant()">
+                Save Registration
+            </button>
+            <div id="obMsg" style="margin-top:10px; font-weight:bold;"></div>
+        </div>
+    </div>
+
+    <div id="readingModal" class="modal">
+        <div class="modal-content">
+            <h3>Unit Billing: <span id="modal-unit-id"></span></h3>
+            <p>Tenant: <strong id="modal-tenant-name"></strong></p>
+            <hr>
+            <div class="calc-row"><span>Base Rent:</span> <span>KES <span id="modal-base-rent">0</span></span></div>
+            <div class="calc-row"><span>Prev Meter:</span> <span id="modal-prev-meter">0</span></div>
+            <div class="calc-row"><span>One-time Deposit:</span> <span>KES <span id="modal-deposit">0</span></span></div>
+            <br>
+            <label>Current Reading:</label>
+            <input type="number" id="currentMeter" placeholder="Enter Current Reading" oninput="calculateTotal()">
+            
+            <div id="bill-summary" style="font-size: 0.9rem; margin-top: 10px; color: #64748b;">
+                <div>Water Units: <span id="calc-water-units">0</span></div>
+                <div>Water Cost: KES <span id="calc-water-cost">0</span></div>
+                <div>Garbage Fee: KES 100</div>
+            </div>
+
+            <div class="total-box" style="background:#f1f5f9; padding:15px; border-radius:8px; margin:15px 0; border: 1px solid #cbd5e1;">
+                <strong style="font-size: 1.2rem;">Grand Total: KES <span id="modal-total-display">0</span></strong>
+                <div style="margin-top:10px; color:#334155; font-size:0.9rem;">
+                    <div class="calc-row"><span>Base Rent</span><span>KES <span id="grand-rent">0</span></span></div>
+                    <div class="calc-row"><span>Water Charge</span><span>KES <span id="grand-water">0</span></span></div>
+                    <div class="calc-row"><span>Garbage Fee</span><span>KES <span id="grand-garbage">100</span></span></div>
+                    <div class="calc-row"><span>Deposit</span><span>KES <span id="grand-deposit">0</span></span></div>
+                </div>
+            </div>
+            <label class="small muted" style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+                <input type="checkbox" id="sendStatementSms" checked style="width:auto;">
+                Send bill SMS statement to tenant after saving
+            </label>
+            
+            <button class="btn btn-primary" onclick="submitBill()">Save & Generate Bill</button>
+            <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+        </div>
+    </div>
+
+   <script>
+    const API_URL = (() => {
+        const { protocol, hostname, port, origin } = window.location;
+        if (hostname === '127.0.0.1' || hostname === 'localhost') {
+            if (port && port !== '3000') return `${protocol}//${hostname}:3000/api`;
+        }
+        return `${origin}/api`;
+    })();
+    let allUnits = [];
+    let selectedUnit = null;
+    let appSettings = { water_rate: 235, garbage_fee: 100 };
+
+    // Load Data
+    async function init() {
+        try {
+            const settingsRes = await fetch(`${API_URL}/settings`);
+            if (settingsRes.ok) {
+                appSettings = await settingsRes.json();
+            }
+            const res = await fetch(`${API_URL}/units`);
+            if(res.ok) {
+                document.getElementById('server-status').innerText = "● System Online";
+                document.getElementById('server-status').style.color = "#22c55e";
+                allUnits = await res.json();
+                renderUnits(allUnits);
+                updateStats(allUnits);
+            }
+        } catch (err) {
+            console.error("Connection error:", err);
+            document.getElementById('server-status').innerText = "● Server Offline";
+        } finally {
+            setTimeout(() => {
+                const overlay = document.getElementById('welcome-overlay');
+                if(overlay) overlay.classList.remove('show');
+            }, 800);
+        }
+    }
+
+    // Draw the building layout
+    function renderUnits(units) {
+        const grid = document.getElementById('units-grid');
+        grid.innerHTML = '';
+        units.forEach(unit => {
+            const isOccupied = unit.tenant_name && unit.tenant_name.trim() !== "";
+            const card = document.createElement('div');
+            card.className = `unit-card ${!isOccupied ? 'vacant' : ''}`;
+            
+            // Show total bill if it exists, otherwise show $0
+            const currentBill = unit.total_bill ? Number(unit.total_bill).toLocaleString() : '0';
+            const unitStatus = unit.status || (isOccupied ? 'Occupied' : 'Vacant');
+            const floorLabel = Number(unit.floor) === 0 ? 'Ground Floor' : `Floor ${unit.floor ?? '-'}`;
+
+            card.innerHTML = `
+                <div class="unit-id">${unit.id}</div>
+                <div class="unit-name">${isOccupied ? unit.tenant_name : 'AVAILABLE'}</div>
+                <div class="unit-sub">${floorLabel}</div>
+                <div class="unit-sub">${isOccupied ? 'Phone: ' + (unit.tenant_phone || 'N/A') : ''}</div>
+                <div class="unit-sub">${isOccupied ? 'Bill: KES ' + currentBill : 'Vacant Unit'}</div>
+                <span class="badge ${isOccupied ? 'badge-pending' : 'badge-vacant'}">
+                    ${unitStatus}
+                </span>
+            `;
+            card.onclick = () => openModal(unit);
+            grid.appendChild(card);
+        });
+    }
+
+    function updateStats(units) {
+        const occupied = units.filter(u => u.tenant_name && u.tenant_name.trim() !== "").length;
+        const revenue = units.reduce((acc, u) => acc + (Number(u.total_bill) || 0), 0);
+        document.getElementById('occ-count').innerText = occupied;
+        document.getElementById('total-revenue').innerText = "KES " + revenue.toLocaleString();
+    }
+
+    async function registerTenant() {
+        const unitId = document.getElementById('obUnit').value.trim().toUpperCase();
+        const name = document.getElementById('obName').value.trim();
+        const phone = document.getElementById('obPhone').value.trim();
+        const rent = document.getElementById('obRent').value.trim();
+        const deposit = document.getElementById('obDeposit').value.trim();
+        const msg = document.getElementById('obMsg');
+
+        if(!unitId || !name) return alert("Please fill Unit ID and Name");
+
+        try {
+            msg.innerText = "Saving...";
+            const res = await fetch(`${API_URL}/units/${unitId}/onboard`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    tenant_name: name, 
+                    tenant_phone: phone, 
+                    base_rent: parseFloat(rent) || 0,
+                    security_deposit: parseFloat(deposit) || 0
+                })
+            });
+            if(res.ok) {
+                msg.innerText = "✅ Successfully saved!";
+                document.getElementById('obUnit').value = '';
+                document.getElementById('obName').value = '';
+                document.getElementById('obDeposit').value = '';
+                init();
+            }
+        } catch (err) { console.error(err); }
+    }
+
+    function openModal(unit) {
+        if(!(unit.tenant_name && unit.tenant_name.trim() !== "")) {
+            window.location.hash = "onboard-section";
+            document.getElementById('obUnit').value = unit.id;
+            return;
+        }
+        selectedUnit = unit;
+        document.getElementById('modal-unit-id').innerText = unit.id;
+        document.getElementById('modal-tenant-name').innerText = unit.tenant_name;
+        document.getElementById('modal-base-rent').innerText = Number(unit.base_rent).toLocaleString();
+        document.getElementById('modal-prev-meter').innerText = unit.current_reading || 0;
+        
+        document.getElementById('currentMeter').value = '';
+        document.getElementById('modal-total-display').innerText = '0';
+        document.getElementById('calc-water-units').innerText = '0';
+        document.getElementById('calc-water-cost').innerText = '0';
+        document.getElementById('grand-rent').innerText = Number(unit.base_rent || 0).toLocaleString();
+        document.getElementById('grand-water').innerText = '0';
+        document.getElementById('grand-garbage').innerText = Number(unit.garbage_fee || 100).toLocaleString();
+        const firstBillDeposit = Number(unit.bill_count || 0) === 0 ? Number(unit.security_deposit || 0) : 0;
+        document.getElementById('modal-deposit').innerText = firstBillDeposit.toLocaleString();
+        document.getElementById('grand-deposit').innerText = firstBillDeposit.toLocaleString();
+        
+        document.getElementById('readingModal').style.display = 'flex';
+    }
+
+    function calculateTotal() {
+        const curr = Number(document.getElementById('currentMeter').value || 0);
+        const prev = Number(selectedUnit.current_reading || 0);
+        const rent = Number(selectedUnit.base_rent || 0);
+        
+        const waterUnits = Math.max(0, curr - prev);
+        const waterRate = Number(appSettings.water_rate || 235);
+        const waterCharge = waterUnits * waterRate;
+        const garbage = Number(selectedUnit.garbage_fee || appSettings.garbage_fee || 100);
+        const deposit = Number(selectedUnit.bill_count || 0) === 0 ? Number(selectedUnit.security_deposit || 0) : 0;
+        const total = rent + waterCharge + garbage + deposit;
+        
+        document.getElementById('calc-water-units').innerText = waterUnits;
+        document.getElementById('calc-water-cost').innerText = waterCharge.toLocaleString();
+        document.getElementById('modal-total-display').innerText = total.toLocaleString();
+        document.getElementById('grand-rent').innerText = rent.toLocaleString();
+        document.getElementById('grand-water').innerText = waterCharge.toLocaleString();
+        document.getElementById('grand-garbage').innerText = garbage.toLocaleString();
+        document.getElementById('grand-deposit').innerText = deposit.toLocaleString();
+        
+        return { waterUnits, waterCharge, total, curr, prev, rent, garbage, deposit };
+    }
+
+    async function submitBill() {
+        const data = calculateTotal();
+        if(data.curr <= data.prev && data.curr !== 0) {
+            alert("Current reading must be higher than previous reading!");
+            return;
+        }
+
+        try {
+            const res = await fetch(`${API_URL}/readings`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    unitId: selectedUnit.id,
+                    current_reading: data.curr,
+                    previous_reading: data.prev,
+                    water_units: data.waterUnits,
+                    water_charge: data.waterCharge,
+                    rent_amount: data.rent,
+                    garbage_fee: data.garbage,
+                    deposit_amount: data.deposit,
+                    total_amount: data.total
+                })
+            });
+
+            if(res.ok) {
+                alert("✅ Bill Successfully Saved for " + selectedUnit.id);
+                const shouldSendSms = document.getElementById('sendStatementSms')?.checked;
+                if (shouldSendSms) {
+                    const smsRes = await fetch(`${API_URL}/notifications/units/${selectedUnit.id}/statement`, { method: 'POST' });
+                    if (!smsRes.ok) {
+                        const smsErr = await smsRes.json().catch(() => ({}));
+                        alert(`Bill saved, but SMS was not queued: ${smsErr.error || 'Unknown error'}`);
+                    }
+                }
+                closeModal();
+                init(); // Refresh UI
+            } else {
+                const err = await res.json();
+                alert("Error: " + err.error);
+            }
+        } catch (err) {
+            console.error("Submission Error:", err);
+        }
+    }
+
+    function closeModal() { document.getElementById('readingModal').style.display = 'none'; }
+    
+    function filterUnits() {
+        const term = document.getElementById('searchInput').value.toLowerCase();
+        renderUnits(allUnits.filter(u => 
+            u.id.toLowerCase().includes(term) || 
+            (u.tenant_name && u.tenant_name.toLowerCase().includes(term))
+        ));
+    }
+
+    init();
+</script>
+</body>
+</html>

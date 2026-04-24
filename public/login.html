@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Saftech Pro | Login</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="stylesheet" href="ui.css" />
+</head>
+<body>
+  <div style="max-width:420px; margin: 60px auto; padding: 25px;" class="card">
+    <h2 style="text-align:center;"><i class="fa-solid fa-building"></i> SAFTECH LOGIN</h2>
+    <p id="serverStatus" style="text-align:center; font-size:12px; color:orange;">Checking server connection...</p>
+    <hr style="margin: 20px 0; border: 0; border-top: 1px solid #eee;">
+
+    <div style="background: #fef9c3; border: 1px solid #facc15; padding: 10px; border-radius: 8px; font-size: 12px; margin-bottom: 15px; text-align: center;">
+      <strong>Caretaker:</strong> Leave Unit blank and enter caretaker password.
+    </div>
+
+    <div class="form-group">
+      <label>Unit Number (Leave blank for Caretaker)</label>
+      <input type="text" id="unitNumber" class="form-control" placeholder="e.g. 1A" style="width:100%; padding:10px; margin-bottom:15px; border-radius:8px; border:1px solid #ccc;">
+    </div>
+
+    <div class="form-group">
+      <label>Phone Number</label>
+      <input type="tel" id="phoneNumber" class="form-control" placeholder="0712345678" style="width:100%; padding:10px; margin-bottom:15px; border-radius:8px; border:1px solid #ccc;">
+    </div>
+
+    <div class="form-group">
+      <label>Password (Caretakers only)</label>
+      <input type="password" id="password" class="form-control" style="width:100%; padding:10px; margin-bottom:15px; border-radius:8px; border:1px solid #ccc;">
+    </div>
+
+    <button id="loginBtn" style="width:100%; padding:14px; background:#2563eb; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:bold;">
+      Sign In
+    </button>
+    
+    <div id="errorMsg" style="color:red; display:none; margin-top:15px; text-align:center; background:#fee2e2; padding:10px; border-radius:8px;"></div>
+    <div id="successMsg" style="color:green; display:none; margin-top:15px; text-align:center; background:#dcfce7; padding:10px; border-radius:8px;"></div>
+  </div>
+
+  <script>
+    const API_URL = (() => {
+      const { protocol, hostname, port, origin } = window.location;
+      if (hostname === '127.0.0.1' || hostname === 'localhost') {
+        if (port && port !== '3000') return `${protocol}//${hostname}:3000/api`;
+      }
+      return `${origin}/api`;
+    })();
+
+    function setText(id, message) {
+      const el = document.getElementById(id);
+      el.textContent = message;
+      el.style.display = 'block';
+      const other = id === 'errorMsg' ? 'successMsg' : 'errorMsg';
+      document.getElementById(other).style.display = 'none';
+    }
+
+    async function checkServer() {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2000);
+        await fetch(`${API_URL}/units`, { signal: controller.signal }); 
+        document.getElementById('serverStatus').innerHTML = '<i class="fa-solid fa-circle" style="color:green"></i> SERVER ONLINE';
+      } catch (e) {
+        document.getElementById('serverStatus').innerHTML = '<i class="fa-solid fa-circle" style="color:red"></i> SERVER OFFLINE';
+      }
+    }
+    checkServer();
+
+    document.getElementById('loginBtn').addEventListener('click', async () => {
+      const unitId = document.getElementById('unitNumber').value.trim().toUpperCase();
+      const phone = document.getElementById('phoneNumber').value.trim();
+      const password = document.getElementById('password').value.trim();
+
+      try {
+        if (unitId === "") {
+          const settingsRes = await fetch(`${API_URL}/settings`);
+          const settings = await settingsRes.json();
+          const expectedPin = String(settings.staff_pin || "1234");
+          if (!password || password !== expectedPin) {
+            return setText('errorMsg', 'Invalid caretaker password.');
+          }
+          localStorage.setItem("saftech_role", "caretaker");
+          setText('successMsg', 'Caretaker login successful.');
+          setTimeout(() => { window.location.href = 'index.html'; }, 700);
+          return;
+        }
+
+        if (!phone) {
+          return setText('errorMsg', 'Phone number is required for tenant login.');
+        }
+
+        const res = await fetch(`${API_URL}/units`);
+        const units = await res.json();
+        const unit = units.find(
+          (u) => String(u.id).toUpperCase() === unitId && String(u.tenant_phone || '').trim() === phone
+        );
+        if (!unit) {
+          return setText('errorMsg', 'Tenant details do not match our records.');
+        }
+
+        sessionStorage.setItem('activeUnit', JSON.stringify(unit));
+        localStorage.setItem("saftech_role", "tenant");
+        setText('successMsg', 'Tenant login successful.');
+        setTimeout(() => { window.location.href = 'tenant.html'; }, 700);
+      } catch (_err) {
+        setText('errorMsg', 'Login failed. Check server connection.');
+      }
+    });
+  </script>
+</body>
+</html>

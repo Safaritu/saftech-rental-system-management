@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Saftech Pro | Settings</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="stylesheet" href="ui.css" />
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo"><i class="fa-solid fa-building"></i></div>
+        <div>
+          <div class="title">Saftech Pro</div>
+          <div class="subtitle">Rental ERP</div>
+        </div>
+      </div>
+      <nav class="nav">
+        <a href="index.html"><i class="fa-solid fa-gauge-high"></i> Dashboard</a>
+        <a href="verify.html"><i class="fa-solid fa-check-double"></i> Verification</a>
+        <a class="active" href="settings.html"><i class="fa-solid fa-gear"></i> Settings</a>
+        <a href="tenant.html"><i class="fa-solid fa-house-user"></i> Tenant Portal</a>
+        <a href="login.html" id="navLogout"><i class="fa-solid fa-right-from-bracket"></i> Logout</a>
+      </nav>
+      <div class="footer" id="footerMeta"></div>
+    </aside>
+
+    <main class="content">
+      <div class="topbar">
+        <div class="row" style="gap:10px;">
+          <div class="brand" style="padding:0;border:none;margin:0;">
+            <div class="logo"><i class="fa-solid fa-building"></i></div>
+          </div>
+          <div>
+            <div style="font-weight:900;">Saftech Pro</div>
+            <div class="muted small">Settings</div>
+          </div>
+        </div>
+        <a class="btn btn-icon ghost" href="index.html" title="Back">
+          <i class="fa-solid fa-arrow-left"></i>
+        </a>
+      </div>
+
+      <div class="panel pad">
+        <div class="h1">Global Settings</div>
+        <div class="muted small" style="margin-top:6px;">
+          These values drive billing: \((\text{current}-\text{previous})\times\text{waterRate} + \text{garbage} + \text{rent}\).
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:14px;align-items:stretch;">
+        <div class="panel pad" style="flex:1;min-width:300px;">
+          <div class="h2"><i class="fa-solid fa-warehouse"></i> Property Info</div>
+          <div class="row" style="margin-top:12px;">
+            <div class="grow">
+              <label class="small muted">Property Name</label>
+              <input id="propertyName" type="text" placeholder="e.g. Saftech Resolutions Apartments" style="margin-top:6px;" />
+            </div>
+            <div class="grow">
+              <label class="small muted">Location</label>
+              <input id="propertyLocation" type="text" placeholder="e.g. Nairobi" style="margin-top:6px;" />
+            </div>
+          </div>
+          <div class="row" style="margin-top:12px;">
+            <div class="grow">
+              <label class="small muted">Caretaker Name</label>
+              <input id="caretakerName" type="text" placeholder="Caretaker" style="margin-top:6px;" />
+            </div>
+            <div class="grow">
+              <label class="small muted">Caretaker Phone</label>
+              <input id="caretakerPhone" type="tel" placeholder="07XXXXXXXX" style="margin-top:6px;" />
+            </div>
+          </div>
+        </div>
+
+        <div class="panel pad" style="flex:1;min-width:300px;">
+          <div class="h2"><i class="fa-solid fa-sliders"></i> Billing Config</div>
+          <div class="row" style="margin-top:12px;">
+            <div class="grow">
+              <label class="small muted">Water Rate (KES per m³)</label>
+              <input id="waterRate" type="number" inputmode="numeric" placeholder="235" style="margin-top:6px;" />
+            </div>
+            <div class="grow">
+              <label class="small muted">Monthly Garbage (KES)</label>
+              <input id="garbageFee" type="number" inputmode="numeric" placeholder="100" style="margin-top:6px;" />
+            </div>
+          </div>
+          <div style="margin-top:12px;">
+            <label class="small muted">Staff PIN (demo)</label>
+            <input id="staffPin" type="password" inputmode="numeric" placeholder="1234" style="margin-top:6px;" />
+          </div>
+          <div class="row" style="margin-top:12px;">
+            <button class="btn primary grow" id="btnSave" type="button">
+              <i class="fa-solid fa-floppy-disk"></i>
+              Save Settings
+            </button>
+            <a class="btn ghost" href="index.html"><i class="fa-solid fa-gauge-high"></i> Dashboard</a>
+          </div>
+          <div class="hr" style="margin-top:14px;"></div>
+          <div class="h2"><i class="fa-solid fa-message"></i> Reminder Queue</div>
+          <div class="row" style="margin-top:10px;">
+            <div class="grow">
+              <label class="small muted">Queue reminders for tenants due by date</label>
+              <input id="reminderDate" type="date" style="margin-top:6px;" />
+            </div>
+            <div style="display:flex; align-items:flex-end;">
+              <button class="btn ghost" id="btnQueueReminders" type="button">
+                <i class="fa-solid fa-paper-plane"></i> Queue Reminders
+              </button>
+            </div>
+          </div>
+          <div class="muted small" id="msg" style="margin-top:10px;"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const API_URL = (() => {
+      const { protocol, hostname, port, origin } = window.location;
+      if (hostname === '127.0.0.1' || hostname === 'localhost') {
+        if (port && port !== '3000') return `${protocol}//${hostname}:3000/api`;
+      }
+      return `${origin}/api`;
+    })();
+
+    const el = (id) => document.getElementById(id);
+    const msg = el("msg");
+
+    async function load() {
+      const role = localStorage.getItem("saftech_role") || "staff";
+      el("footerMeta").textContent = `User: ${role} • Live API mode`;
+      const response = await fetch(`${API_URL}/settings`);
+      const s = await response.json();
+
+      el("propertyName").value = s.property_name || "";
+      el("propertyLocation").value = s.property_location || "";
+      el("caretakerName").value = s.caretaker_name || "";
+      el("caretakerPhone").value = s.caretaker_phone || "";
+      el("waterRate").value = Number(s.water_rate ?? 235);
+      el("garbageFee").value = Number(s.garbage_fee ?? 100);
+      el("staffPin").value = String(s.staff_pin || "1234");
+    }
+
+    el("btnSave").addEventListener("click", async () => {
+      try {
+        const waterRate = Number(el("waterRate").value);
+        const garbageFee = Number(el("garbageFee").value);
+        if (!Number.isFinite(waterRate) || waterRate <= 0) throw new Error("Water rate must be a number > 0.");
+        if (!Number.isFinite(garbageFee) || garbageFee < 0) throw new Error("Garbage must be a number ≥ 0.");
+
+        const res = await fetch(`${API_URL}/settings`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            property_name: el("propertyName").value.trim(),
+            property_location: el("propertyLocation").value.trim(),
+            caretaker_name: el("caretakerName").value.trim(),
+            caretaker_phone: el("caretakerPhone").value.trim(),
+            water_rate: waterRate,
+            garbage_fee: garbageFee,
+            staff_pin: el("staffPin").value.trim() || "1234"
+          })
+        });
+        if (!res.ok) throw new Error("Failed to save settings");
+
+        msg.textContent = "Saved. Dashboard and billing now use these settings.";
+        msg.style.color = "var(--success)";
+      } catch (e) {
+        msg.textContent = e?.message || "Failed to save.";
+        msg.style.color = "var(--warning)";
+      }
+    });
+
+    el("btnQueueReminders").addEventListener("click", async () => {
+      try {
+        const dueDate = el("reminderDate").value;
+        if (!dueDate) throw new Error("Select a date first.");
+        const res = await fetch(`${API_URL}/notifications/reminders/queue`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ dueDate })
+        });
+        const payload = await res.json();
+        if (!res.ok) throw new Error(payload.error || "Could not queue reminders.");
+        msg.textContent = `Queued ${payload.queued} reminder message(s) for due date ${dueDate}.`;
+        msg.style.color = "var(--success)";
+      } catch (e) {
+        msg.textContent = e?.message || "Failed to queue reminders.";
+        msg.style.color = "var(--warning)";
+      }
+    });
+
+    document.getElementById("navLogout").addEventListener("click", (e) => {
+      e.preventDefault();
+      localStorage.removeItem("saftech_role");
+      window.location.href = "login.html";
+    });
+
+    load();
+  </script>
+</body>
+</html>

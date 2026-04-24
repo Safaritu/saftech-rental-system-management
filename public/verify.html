@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SAFTECH | Payment Verification</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="stylesheet" href="ui.css">
+</head>
+<body style="padding: 20px; display: flex; justify-content: center;">
+  
+  <div style="width: 100%; max-width: 900px;">
+    <div class="panel pad">
+      <div class="row" style="justify-content: space-between;">
+        <div class="row" style="gap:15px;">
+          <div class="logo"><i class="fa-solid fa-check-double"></i></div>
+          <div>
+            <div class="h1">Payment Verification</div>
+            <div class="muted small">Review and approve tenant M-Pesa payments</div>
+          </div>
+        </div>
+        <a href="index.html" class="btn ghost"><i class="fa-solid fa-arrow-left"></i> Back</a>
+      </div>
+    </div>
+
+    <div class="panel pad" style="margin-top: 20px;">
+      <div class="h2">Pending Clearances</div>
+      <div id="verifyList" style="margin-top: 15px;">
+        <p class="muted">Scanning for unpaid bills...</p>
+      </div>
+    </div>
+
+    <div class="panel pad" style="margin-top: 20px;">
+      <div class="h2">Tenant Uploads Queue (FIFO)</div>
+      <div id="uploadList" style="margin-top: 15px;">
+        <p class="muted">Loading tenant uploads...</p>
+      </div>
+    </div>
+
+    <div class="panel pad" style="margin-top: 20px;">
+      <div class="h2">All Tenant Upload Records</div>
+      <div id="uploadTable" style="margin-top: 15px;">
+        <p class="muted">Loading upload records...</p>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = (() => {
+      const { protocol, hostname, port, origin } = window.location;
+      if (hostname === '127.0.0.1' || hostname === 'localhost') {
+        if (port && port !== '3000') return `${protocol}//${hostname}:3000/api`;
+      }
+      return `${origin}/api`;
+    })();
+    const API_BASE = API_URL.replace(/\/api$/, '');
+
+    async function loadPending() {
+      const container = document.getElementById('verifyList');
+      const [unitRes, latestRes] = await Promise.all([
+        fetch(`${API_URL}/payments/pending`),
+        fetch(`${API_URL}/payments/uploads/latest`)
+      ]);
+      const units = await unitRes.json();
+      const latestUploads = await latestRes.json();
+      const latestByUnit = new Map(latestUploads.map(u => [String(u.unit_id).toUpperCase(), u]));
+      
+      if (units.length === 0) {
+        container.innerHTML = `<div class="muted" style="text-align:center; padding: 20px;">✅ All bills are currently cleared.</div>`;
+        return;
+      }
+
+      container.innerHTML = units.map(u => `
+        <div class="panel pad" style="margin-bottom: 10px; border: 1px solid #333;">
+          <div class="row" style="justify-content: space-between;">
+            <div>
+              <div style="font-weight: bold; font-size: 1.1em;">Unit ${u.id} - ${u.tenant_name}</div>
+              <div class="muted small">Total Due: <span style="color: #00d1b2; font-weight:bold;">KES ${u.total_bill.toLocaleString()}</span></div>
+              ${(() => {
+                const up = latestByUnit.get(String(u.id).toUpperCase());
+                if (!up) {
+                  return `<div class="small muted" style="margin-top:8px;">No tenant proof uploaded yet.</div>`;
+                }
+                const statusColor = up.status === 'Pending' ? '#f59e0b' : (up.status === 'Approved' ? '#10b981' : '#ef4444');
+                return `
+                  <div style="margin-top:10px; padding:10px; border:1px solid #334155; border-radius:10px; background:rgba(15,23,42,0.45);">
+                    <div class="small muted">Latest Upload • <span style="color:${statusColor}; font-weight:700;">${up.status}</span> • ${new Date(up.created_at).toLocaleString()}</div>
+                    <div class="small" style="margin-top:6px; white-space:pre-wrap;">${up.message || ''}</div>
+                    <div class="small muted" style="margin-top:4px;">Code: ${up.tx_code || 'N/A'} • Phone: ${up.tenant_phone || 'N/A'}</div>
+                    ${up.image_url ? `<a class="small" href="${API_BASE}${up.image_url}" target="_blank" style="display:inline-block;margin-top:6px;color:#00d1b2;">View uploaded screenshot</a>` : `<div class="small muted" style="margin-top:6px;">No screenshot attached.</div>`}
+                  </div>
+                `;
+              })()}
+            </div>
+            <div style="display:flex; flex-direction:column; gap:8px; align-items:flex-end;">
+              <button class="btn primary" onclick="approvePayment('${u.id}')">
+                <i class="fa-solid fa-check"></i> Approve & Clear
+              </button>
+              ${(() => {
+                const up = latestByUnit.get(String(u.id).toUpperCase());
+                if (!up || up.status !== 'Pending') return '';
+                return `
+                  <button class="btn ghost" onclick="reviewUpload(${up.id}, 'approve')">
+                    <i class="fa-solid fa-check-double"></i> Approve Upload
+                  </button>
+                  <button class="btn ghost" onclick="reviewUpload(${up.id}, 'reject')">
+                    <i class="fa-solid fa-xmark"></i> Reject Upload
+                  </button>
+                `;
+              })()}
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    async function loadUploads() {
+      const container = document.getElementById('uploadList');
+      try {
+        const res = await fetch(`${API_URL}/payments/uploads/pending`);
+        const uploads = await res.json();
+        if (!uploads.length) {
+          container.innerHTML = `<div class="muted" style="text-align:center; padding: 10px;">No pending tenant uploads.</div>`;
+          return;
+        }
+        container.innerHTML = uploads.map(u => `
+          <div class="panel pad" style="margin-bottom: 10px; border: 1px solid #333;">
+            <div class="row" style="justify-content: space-between; align-items: flex-start;">
+              <div>
+                <div style="font-weight: bold;">Unit ${u.unit_id} • ${u.tenant_phone}</div>
+                <div class="muted small">Code: ${u.tx_code || 'N/A'} • ${new Date(u.created_at).toLocaleString()}</div>
+                <div class="small" style="margin-top:8px; white-space: pre-wrap;">${u.message}</div>
+                ${u.image_url ? `<a class="small" href="${API_BASE}${u.image_url}" target="_blank" style="display:inline-block;margin-top:8px;color:#00d1b2;">View uploaded screenshot</a><br/><img src="${API_BASE}${u.image_url}" alt="proof" style="margin-top:8px; max-width:180px; border-radius:8px; border:1px solid #334155;" />` : '<div class="small muted" style="margin-top:6px;">No screenshot attached.</div>'}
+              </div>
+              <div style="display:flex; gap:8px; margin-left:12px;">
+                <button class="btn primary" onclick="reviewUpload(${u.id}, 'approve')"><i class="fa-solid fa-check"></i> Approve</button>
+                <button class="btn ghost" onclick="reviewUpload(${u.id}, 'reject')"><i class="fa-solid fa-xmark"></i> Reject</button>
+              </div>
+            </div>
+          </div>
+        `).join('');
+      } catch (_err) {
+        container.innerHTML = `<div class="muted small">Could not load tenant uploads.</div>`;
+      }
+    }
+
+    async function loadUploadTable() {
+      const container = document.getElementById('uploadTable');
+      try {
+        const res = await fetch(`${API_URL}/payments/uploads`);
+        const rows = await res.json();
+        if (!rows.length) {
+          container.innerHTML = `<div class="muted" style="text-align:center; padding: 10px;">No upload records found.</div>`;
+          return;
+        }
+        container.innerHTML = rows.map(r => `
+          <div class="panel pad" style="margin-bottom:10px; border:1px solid #334155;">
+            <div class="row" style="justify-content: space-between; align-items:flex-start;">
+              <div style="flex:1;">
+                <div style="font-weight:700;">Unit ${r.unit_id} • ${r.tenant_phone}</div>
+                <div class="muted small">Code: ${r.tx_code || 'N/A'} • Status: ${r.status} • ${new Date(r.created_at).toLocaleString()}</div>
+                <div class="small" style="margin-top:6px; white-space:pre-wrap;">${r.message || ''}</div>
+                ${r.image_url ? `<img src="${API_BASE}${r.image_url}" alt="tenant proof" style="margin-top:8px; max-width:220px; border-radius:8px; border:1px solid #334155;" />` : `<div class="small muted" style="margin-top:6px;">No screenshot attached.</div>`}
+              </div>
+              <div style="display:flex; flex-direction:column; gap:8px; margin-left:10px;">
+                ${r.status === 'Pending' ? `
+                  <button class="btn primary" onclick="reviewUpload(${r.id}, 'approve')"><i class="fa-solid fa-check"></i> Accept</button>
+                  <button class="btn ghost" onclick="reviewUpload(${r.id}, 'reject')"><i class="fa-solid fa-xmark"></i> Reject</button>
+                ` : `<span class="badge ${r.status === 'Approved' ? 'success' : 'warning'}">${r.status}</span>`}
+              </div>
+            </div>
+          </div>
+        `).join('');
+      } catch (_err) {
+        container.innerHTML = `<div class="muted small">Could not load upload records.</div>`;
+      }
+    }
+
+    async function approvePayment(unitId) {
+      if(!confirm(`Clear balance for Unit ${unitId}?`)) return;
+
+      try {
+        const res = await fetch(`${API_URL}/payments/approve`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ unitId })
+        });
+        const payload = await res.json().catch(() => ({}));
+        if (res.ok) {
+          alert(`Success: Unit ${unitId} is now cleared.`);
+          loadPending();
+        } else {
+          alert(payload.error || "Error approving payment.");
+        }
+      } catch (err) {
+        alert(`Error approving payment: ${err.message}`);
+      }
+    }
+
+    async function reviewUpload(uploadId, action) {
+      const title = action === 'approve' ? 'approve' : 'reject';
+      if (!confirm(`Confirm ${title} for upload #${uploadId}?`)) return;
+
+      try {
+        const res = await fetch(`${API_URL}/payments/uploads/${uploadId}/review`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action })
+        });
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(payload.error || `Could not ${title} upload.`);
+        }
+        alert(`Upload ${title}d successfully.`);
+        await loadPending();
+        await loadUploads();
+        await loadUploadTable();
+      } catch (err) {
+        alert(err.message);
+      }
+    }
+
+    window.onload = async () => {
+      await loadPending();
+      await loadUploads();
+      await loadUploadTable();
+    };
+  </script>
+</body>
+</html>

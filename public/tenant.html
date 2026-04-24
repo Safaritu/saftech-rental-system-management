@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SAFTECH | Tenant Portal</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+  <link rel="stylesheet" href="ui.css" />
+  <style>
+    /* Professional Receipt Print Layout */
+    @media print {
+      body { background: white !important; color: black !important; }
+      .no-print, .welcome-overlay, .logo, #btnLogout, #loginSection, .spinner { display: none !important; }
+      
+      #mainDashboard { display: block !important; margin: 0; padding: 0; }
+      
+      #printableReceipt { 
+        visibility: visible !important;
+        position: absolute; 
+        left: 0; 
+        top: 0; 
+        width: 100%; 
+        border: 2px solid #eee; 
+        padding: 40px;
+        color: black !important;
+        background: white !important;
+      }
+
+      #printableReceipt .h2, #printableReceipt .line, #printableReceipt span, #printableReceipt div {
+        color: black !important;
+      }
+
+      #printableReceipt .hr {
+        border-bottom: 2px solid #000 !important;
+        margin: 20px 0;
+      }
+
+      /* Official Business Header for Print */
+      #printableReceipt::before {
+        content: "SAFTECH RESOLUTIONS - OFFICIAL RENTAL RECEIPT";
+        display: block;
+        text-align: center;
+        font-weight: bold;
+        font-size: 1.6em;
+        margin-bottom: 10px;
+        color: black;
+      }
+      
+      #printableReceipt::after {
+        content: "Generated on ${new Date().toLocaleString()} • Thank you for your residency.";
+        display: block;
+        text-align: center;
+        font-size: 0.8em;
+        margin-top: 40px;
+        color: #666;
+      }
+    }
+  </style>
+</head>
+<body style="display:flex;justify-content:center;align-items:flex-start;min-height:100vh;padding:16px;">
+  
+  <div id="welcome-overlay" class="welcome-overlay show">
+    <div class="welcome-content">
+      <div class="spinner"></div>
+      <h1>SAFTECH</h1>
+      <p>Loading your secure portal...</p>
+    </div>
+  </div>
+
+  <div style="width:100%;max-width:900px;">
+    <div class="panel pad no-print">
+      <div class="row" style="justify-content:space-between;">
+        <div class="row" style="gap:12px;">
+          <div class="logo"><i class="fa-solid fa-house-user"></i></div>
+          <div>
+            <div class="h1">TENANT PORTAL</div>
+            <div class="muted small">Saftech Resolutions • Manage your residency</div>
+          </div>
+        </div>
+        <button class="btn ghost" id="btnLogout"><i class="fa-solid fa-power-off"></i> Logout</button>
+      </div>
+    </div>
+
+    <div id="loginSection" class="panel pad" style="margin-top:15px;">
+      <div class="h2">Tenant Access</div>
+      <p class="muted small">Enter your details to view your current statement.</p>
+      <div class="row" style="margin-top:15px;">
+        <div class="grow">
+          <label class="small muted">Unit ID (e.g., 1A)</label>
+          <input type="text" id="unitIdInput" placeholder="1A" style="text-transform:uppercase;">
+        </div>
+        <div class="grow">
+          <label class="small muted">Registered Phone</label>
+          <input type="tel" id="phoneInput" placeholder="07...">
+        </div>
+      </div>
+      <button class="btn primary" id="btnLogin" style="width:100%;margin-top:15px;">
+        <i class="fa-solid fa-lock-open"></i> Access My Portal
+      </button>
+      <div id="loginError" class="muted small" style="margin-top:10px; color: #ff4d4d;"></div>
+    </div>
+
+    <div id="mainDashboard" style="display:none; margin-top:15px;">
+      <div class="row" style="align-items:stretch; gap:15px; flex-wrap: wrap;">
+        
+        <div class="panel pad" style="flex:1; min-width: 320px;" id="printableReceipt">
+          <div class="row" style="justify-content:space-between; margin-bottom:10px;">
+            <div class="h2"><i class="fa-solid fa-file-invoice-dollar"></i> Current Statement</div>
+            <span class="badge neutral" id="billStatusBadge">---</span>
+          </div>
+          
+          <div id="tenantInfo" class="muted small" style="margin-bottom:15px; border-bottom: 1px solid #333; padding-bottom:10px;"></div>
+          
+          <div class="break">
+            <div class="line"><span>Base Rent</span><span id="displayRent">KES 0</span></div>
+            <div class="line"><span>Garbage Fee</span><span id="displayGarbage">KES 100</span></div>
+            <div class="line"><span>Water Usage (<span id="waterUnits">0</span> units)</span><span id="displayWater">KES 0</span></div>
+            <div class="hr"></div>
+            <div class="line" style="font-weight:bold; font-size: 1.2em;">
+              <span>Total Balance</span><span id="displayTotal">KES 0</span>
+            </div>
+          </div>
+
+          <div style="margin-top:15px;" class="no-print">
+            <button class="btn ghost" onclick="window.print()" style="width:100%;">
+              <i class="fa-solid fa-print"></i> Download Receipt
+            </button>
+          </div>
+        </div>
+
+        <div style="flex:1; min-width: 320px; display: flex; flex-direction: column; gap:15px;">
+          <div class="panel pad no-print">
+            <div class="h2"><i class="fa-solid fa-paper-plane"></i> Submit Payment</div>
+            <textarea id="mpesaSms" placeholder="Paste full M-Pesa SMS here..." style="height:100px; margin-top:10px;"></textarea>
+            <label class="small muted" style="display:block; margin-top:10px;">Upload M-Pesa Screenshot (optional)</label>
+            <input type="file" id="receiptImage" accept="image/*" style="margin-top:6px;" />
+            <div id="txHint" class="small" style="margin-top:5px; color: #00d1b2; font-weight: bold;"></div>
+            <button class="btn primary" id="btnSubmitPayment" style="width:100%; margin-top:10px;">
+              <i class="fa-solid fa-cloud-arrow-up"></i> Confirm Payment
+            </button>
+            <div id="paymentMsg" class="muted small" style="margin-top:10px;"></div>
+          </div>
+
+          <div class="panel pad no-print">
+            <div class="h2"><i class="fa-solid fa-clock-rotate-left"></i> Payment History</div>
+            <div id="historyList" style="margin-top:10px; max-height: 250px; overflow-y: auto;">
+              <p class="muted small">Loading history...</p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_URL = (() => {
+      const { protocol, hostname, port, origin } = window.location;
+      if (hostname === '127.0.0.1' || hostname === 'localhost') {
+        if (port && port !== '3000') return `${protocol}//${hostname}:3000/api`;
+      }
+      return `${origin}/api`;
+    })();
+    const storage = sessionStorage;
+
+    const formatKES = (amt) => `KES ${Number(amt || 0).toLocaleString()}`;
+
+    const extractTxCode = (text) => {
+      const match = text.match(/\b[A-Z0-9]{10}\b/);
+      return match ? match[0] : null;
+    };
+
+    async function performLogin() {
+      const unitId = document.getElementById('unitIdInput').value.trim().toUpperCase();
+      const phone = document.getElementById('phoneInput').value.trim();
+
+      if(!unitId || !phone) return alert("Please enter both Unit ID and Phone Number.");
+
+      try {
+        const response = await fetch(`${API_URL}/units`);
+        const units = await response.json();
+        const unit = units.find(u => u.id.toUpperCase() === unitId && u.tenant_phone === phone);
+
+        if (unit) {
+          storage.setItem('activeUnit', JSON.stringify(unit));
+          showDashboard(unit);
+        } else {
+          document.getElementById('loginError').textContent = "Details do not match. Please contact management.";
+        }
+      } catch (err) {
+        console.error("Login Error:", err);
+      }
+    }
+
+    async function loadHistory(unitId) {
+      try {
+      const response = await fetch(`${API_URL}/payments/history/${unitId}`);
+        const history = await response.json();
+        const container = document.getElementById('historyList');
+
+        if (!history || history.length === 0) {
+          container.innerHTML = `<p class="muted small">No past payments recorded yet.</p>`;
+          return;
+        }
+
+        container.innerHTML = history.map(bill => {
+          const isPaid = String(bill.status).toLowerCase() === 'paid';
+          const statusClass = isPaid ? 'success' : 'warning';
+          const statusLabel = isPaid ? 'PAID' : (bill.status || 'PENDING').toUpperCase();
+          return `
+          <div style="padding: 10px 0; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div class="small" style="font-weight: bold;">
+                ${new Date(bill.created_at).toLocaleDateString('en-GB', {month: 'long', year: 'numeric'})}
+              </div>
+              <div class="muted" style="font-size: 0.75em;">Ref: SAF-${bill.id}</div>
+            </div>
+            <div style="text-align: right;">
+              <div style="color: #00d1b2; font-weight: bold; font-size: 0.9em;">${formatKES(bill.total_amount)}</div>
+              <div class="badge ${statusClass}" style="font-size: 0.6em; padding: 2px 5px;">${statusLabel}</div>
+            </div>
+          </div>
+        `;
+        }).join('');
+      } catch (err) {
+        console.error("History Error:", err);
+        document.getElementById('historyList').innerHTML = `<p class="muted small">Error loading history.</p>`;
+      }
+    }
+
+    function showDashboard(unit) {
+      document.getElementById('loginSection').style.display = 'none';
+      document.getElementById('mainDashboard').style.display = 'block';
+      
+      document.getElementById('tenantInfo').innerHTML = `
+        <strong>Tenant:</strong> ${unit.tenant_name}<br>
+        <strong>Unit:</strong> ${unit.id} | <strong>Phone:</strong> ${unit.tenant_phone}<br>
+        <strong>Last Updated:</strong> ${new Date(unit.updated_at).toLocaleDateString()}
+      `;
+
+      document.getElementById('displayRent').textContent = formatKES(unit.base_rent);
+      document.getElementById('displayGarbage').textContent = formatKES(100);
+      document.getElementById('waterUnits').textContent = unit.water_units;
+      
+      // Calculate water cost
+      const waterCost = unit.total_bill > 0 ? (unit.total_bill - unit.base_rent - 100) : 0;
+      document.getElementById('displayWater').textContent = formatKES(waterCost);
+      document.getElementById('displayTotal').textContent = formatKES(unit.total_bill);
+      
+      const badge = document.getElementById('billStatusBadge');
+      const isDue = Number(unit.total_bill) > 0;
+      badge.textContent = isDue ? "PAYMENT DUE" : "CLEARED";
+      badge.className = `badge ${isDue ? 'warning' : 'success'}`;
+
+      loadHistory(unit.id);
+    }
+
+    document.getElementById('btnSubmitPayment').addEventListener('click', async () => {
+      const sms = document.getElementById('mpesaSms').value.trim();
+      const tx = extractTxCode(sms);
+      const imageFile = document.getElementById('receiptImage').files?.[0];
+      const activeUnit = storage.getItem('activeUnit');
+      
+      if(!sms) {
+        document.getElementById('paymentMsg').innerHTML = "<span style='color:#ff4d4d'>Please paste your M-Pesa SMS text.</span>";
+        return;
+      }
+      if (!activeUnit) {
+        document.getElementById('paymentMsg').innerHTML = "<span style='color:#ff4d4d'>Session expired. Please login again.</span>";
+        return;
+      }
+
+      const unit = JSON.parse(activeUnit);
+      try {
+        const formData = new FormData();
+        formData.append('unitId', unit.id);
+        formData.append('tenant_phone', unit.tenant_phone || '');
+        formData.append('message', sms);
+        if (tx) formData.append('tx_code', tx);
+        if (imageFile) formData.append('receipt_image', imageFile);
+
+        const res = await fetch(`${API_URL}/payments/uploads`, {
+          method: 'POST',
+          body: formData
+        });
+        const result = await res.json();
+        if (!res.ok) {
+          throw new Error(result.error || "Failed to submit payment proof.");
+        }
+        const txLabel = tx ? `Code <b>${tx}</b>` : 'Your payment proof';
+        const imageNote = result.image_uploaded ? " Screenshot uploaded." : " No screenshot uploaded.";
+        document.getElementById('paymentMsg').innerHTML = `<span style='color:#00d1b2'>Success! ${txLabel} submitted for review.${imageNote}</span>`;
+        document.getElementById('mpesaSms').value = "";
+        document.getElementById('receiptImage').value = "";
+      } catch (err) {
+        document.getElementById('paymentMsg').innerHTML = `<span style='color:#ff4d4d'>${err.message}</span>`;
+      }
+    });
+
+    document.getElementById('mpesaSms').addEventListener('input', (e) => {
+      const code = extractTxCode(e.target.value);
+      document.getElementById('txHint').textContent = code ? `Detected Code: ${code}` : "";
+    });
+
+    document.getElementById('btnLogout').addEventListener('click', () => {
+      storage.clear();
+      location.reload();
+    });
+
+    window.addEventListener('load', () => {
+      setTimeout(() => document.getElementById('welcome-overlay').classList.remove('show'), 800);
+      const savedUnit = storage.getItem('activeUnit');
+      if(savedUnit) showDashboard(JSON.parse(savedUnit));
+    });
+
+    document.getElementById('btnLogin').addEventListener('click', performLogin);
+  </script>
+</body>
+</html>
