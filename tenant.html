@@ -74,6 +74,50 @@
       color: #991b1b;
     }
 
+    /* Payment status badges */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 0.7rem;
+      font-weight: 600;
+    }
+    .status-approved {
+      background: rgba(16, 185, 129, 0.2);
+      color: #10b981;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    .status-pending {
+      background: rgba(245, 158, 11, 0.2);
+      color: #f59e0b;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+    .status-rejected {
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+    .status-paid {
+      background: rgba(16, 185, 129, 0.2);
+      color: #10b981;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    /* Payment info box */
+    .payment-info-box {
+      background: rgba(15, 23, 42, 0.45);
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 12px;
+      margin-top: 10px;
+    }
+    .payment-info-box .label {
+      font-size: 0.7rem;
+      color: #94a3b8;
+    }
+
     /* Additional tenant portal specific styles */
     .row {
       display: flex;
@@ -457,7 +501,7 @@
 
             <div class="panel pad no-print">
               <div class="h2"><i class="fa-solid fa-clock-rotate-left"></i> Payment History</div>
-              <div id="historyList" style="margin-top:10px; max-height: 300px; overflow-y: auto;">
+              <div id="historyList" style="margin-top:10px; max-height: 400px; overflow-y: auto;">
                 <p class="muted small">Loading history...</p>
               </div>
             </div>
@@ -479,16 +523,13 @@
     (function checkAuthentication() {
         const role = localStorage.getItem('saftech_role');
         const loginTime = localStorage.getItem('saftech_login_time');
-        const currentPage = window.location.pathname.split('/').pop();
         
-        // If caretaker tries to access tenant portal, redirect to dashboard
         if (role === 'caretaker') {
             console.warn('Caretaker attempted to access tenant portal');
             window.location.href = 'dashboard.html';
             return;
         }
         
-        // Check if session is too old (optional: 8 hour timeout)
         if (role === 'tenant' && loginTime) {
             const elapsed = Date.now() - parseInt(loginTime);
             const eightHours = 8 * 60 * 60 * 1000;
@@ -505,7 +546,7 @@
     // ========== SESSION MANAGEMENT ==========
     function startSessionMonitor() {
         let inactivityTime = 0;
-        const sessionTimeout = 30 * 60 * 1000; // 30 minutes
+        const sessionTimeout = 30 * 60 * 1000;
         
         function resetInactivityTimer() {
             inactivityTime = 0;
@@ -515,25 +556,23 @@
         
         function checkInactivity() {
             if (document.getElementById('mainDashboard').style.display !== 'block') {
-                return; // Don't monitor if not logged in
+                return;
             }
             
             inactivityTime += 1000;
             const remaining = sessionTimeout - inactivityTime;
             
-            if (remaining <= 60000 && remaining > 0) { // Last minute warning
+            if (remaining <= 60000 && remaining > 0) {
                 const warningEl = document.getElementById('sessionWarning');
                 warningEl.innerHTML = `<i class="fas fa-clock"></i> Session expires in ${Math.ceil(remaining/1000)} seconds`;
                 warningEl.style.display = 'block';
                 warningEl.classList.add('warning');
             } else if (remaining <= 0) {
-                // Session expired
                 alert('Your session has expired due to inactivity. Please login again.');
                 window.logout();
             }
         }
         
-        // Reset timer on user activity
         const events = ['mousedown', 'keydown', 'scroll', 'touchstart', 'click'];
         events.forEach(event => {
             document.addEventListener(event, resetInactivityTimer);
@@ -592,6 +631,18 @@
       return match ? match[0] : null;
     };
 
+    // Get status badge HTML
+    function getStatusBadge(status) {
+        const statusLower = String(status).toLowerCase();
+        if (statusLower === 'approved' || statusLower === 'paid') {
+            return '<span class="status-badge status-approved"><i class="fas fa-check-circle"></i> Approved</span>';
+        } else if (statusLower === 'rejected') {
+            return '<span class="status-badge status-rejected"><i class="fas fa-times-circle"></i> Rejected</span>';
+        } else {
+            return '<span class="status-badge status-pending"><i class="fas fa-clock"></i> Pending Review</span>';
+        }
+    }
+
     // ========== LOGIN FUNCTIONALITY ==========
     async function performLogin() {
       const unitId = document.getElementById('unitIdInput').value.trim().toUpperCase();
@@ -614,7 +665,6 @@
         const unit = units.find(u => u.id.toUpperCase() === unitId && u.tenant_phone === phone);
 
         if (unit) {
-          // Check if unit has a tenant
           if (!unit.tenant_name || unit.tenant_name.trim() === "") {
             document.getElementById('loginError').textContent = "This unit is not currently occupied. Please contact management.";
             return;
@@ -636,37 +686,95 @@
       }
     }
 
-    // ========== LOAD PAYMENT HISTORY ==========
+    // ========== LOAD PAYMENT HISTORY WITH VERIFICATION STATUS ==========
     async function loadHistory(unitId) {
       try {
-        const response = await fetch(`${API_URL}/payments/history/${unitId}`);
-        if (!response.ok) throw new Error('Failed to load history');
-        const history = await response.json();
+        // Fetch both payment history and upload history
+        const [paymentsRes, uploadsRes] = await Promise.all([
+          fetch(`${API_URL}/payments/history/${unitId}`),
+          fetch(`${API_URL}/payments/uploads/unit/${unitId}`).catch(() => ({ ok: false }))
+        ]);
+        
+        let payments = [];
+        if (paymentsRes.ok) {
+          payments = await paymentsRes.json();
+        }
+        
+        let uploads = [];
+        if (uploadsRes.ok) {
+          uploads = await uploadsRes.json();
+        }
+        
         const container = document.getElementById('historyList');
+        
+        // Combine and sort by date (newest first)
+        const allRecords = [
+          ...payments.map(p => ({ ...p, type: 'bill', date: p.created_at, amount: p.total_amount })),
+          ...uploads.map(u => ({ ...u, type: 'upload', date: u.created_at, amount: null }))
+        ].sort((a, b) => new Date(b.date) - new Date(a.date));
 
-        if (!history || history.length === 0) {
-          container.innerHTML = `<p class="muted small">No past payments recorded yet.</p>`;
+        if (allRecords.length === 0) {
+          container.innerHTML = `<p class="muted small">No payment history yet.</p>`;
           return;
         }
 
-        container.innerHTML = history.map(bill => {
-          const isPaid = String(bill.status).toLowerCase() === 'paid';
-          const statusClass = isPaid ? 'success' : 'warning';
-          const statusLabel = isPaid ? 'PAID' : (bill.status || 'PENDING').toUpperCase();
-          return `
-          <div style="padding: 10px 0; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
-            <div>
-              <div class="small" style="font-weight: bold;">
-                ${new Date(bill.created_at).toLocaleDateString('en-GB', {month: 'long', year: 'numeric'})}
+        container.innerHTML = allRecords.map(record => {
+          if (record.type === 'bill') {
+            const isPaid = String(record.status).toLowerCase() === 'paid';
+            const statusClass = isPaid ? 'success' : 'warning';
+            const statusLabel = isPaid ? 'PAID' : (record.status || 'PENDING').toUpperCase();
+            return `
+              <div style="padding: 12px 0; border-bottom: 1px solid var(--border);">
+                <div class="row" style="justify-content: space-between; align-items: flex-start;">
+                  <div>
+                    <div class="small" style="font-weight: bold;">
+                      📄 Bill - ${new Date(record.date).toLocaleDateString('en-GB', {month: 'long', year: 'numeric'})}
+                    </div>
+                    <div class="muted" style="font-size: 0.7em;">Ref: SAF-${record.id}</div>
+                  </div>
+                  <div style="text-align: right;">
+                    <div style="color: #00d1b2; font-weight: bold;">${formatKES(record.amount)}</div>
+                    <div class="badge ${statusClass}" style="font-size: 0.6em; padding: 2px 8px; margin-top: 4px;">${escapeHtml(statusLabel)}</div>
+                  </div>
+                </div>
               </div>
-              <div class="muted" style="font-size: 0.75em;">Ref: SAF-${bill.id}</div>
-            </div>
-            <div>
-              <div style="color: #00d1b2; font-weight: bold; font-size: 0.9em;">${formatKES(bill.total_amount)}</div>
-              <div class="badge ${statusClass}" style="font-size: 0.6em; padding: 2px 8px; margin-top: 4px;">${escapeHtml(statusLabel)}</div>
-            </div>
-          </div>
-        `;
+            `;
+          } else {
+            // Upload record - show verification status
+            return `
+              <div style="padding: 12px 0; border-bottom: 1px solid var(--border);">
+                <div class="row" style="justify-content: space-between; align-items: flex-start;">
+                  <div>
+                    <div class="small" style="font-weight: bold;">
+                      💳 Payment Submission - ${new Date(record.date).toLocaleDateString()}
+                    </div>
+                    <div class="muted" style="font-size: 0.7em;">
+                      ${record.tx_code ? `Code: ${escapeHtml(record.tx_code)}` : 'Manual Entry'}
+                    </div>
+                  </div>
+                  <div style="text-align: right;">
+                    ${getStatusBadge(record.status)}
+                  </div>
+                </div>
+                ${record.status === 'rejected' ? `
+                  <div class="payment-info-box" style="margin-top: 8px;">
+                    <div class="label"><i class="fas fa-info-circle"></i> Reason for rejection:</div>
+                    <div class="small" style="color: #f87171;">Your payment submission was rejected. Please contact management or submit a new payment.</div>
+                  </div>
+                ` : record.status === 'pending' ? `
+                  <div class="payment-info-box" style="margin-top: 8px;">
+                    <div class="label"><i class="fas fa-hourglass-half"></i> Awaiting verification:</div>
+                    <div class="small">Your payment is being reviewed by the caretaker. This usually takes 24-48 hours.</div>
+                  </div>
+                ` : record.status === 'approved' ? `
+                  <div class="payment-info-box" style="margin-top: 8px;">
+                    <div class="label"><i class="fas fa-check-circle"></i> Verification complete:</div>
+                    <div class="small" style="color: #10b981;">Your payment has been approved and credited to your account.</div>
+                  </div>
+                ` : ''}
+              </div>
+            `;
+          }
         }).join('');
       } catch (err) {
         console.error("History Error:", err);
@@ -674,8 +782,24 @@
       }
     }
 
+    // ========== CHECK PENDING PAYMENT STATUS ==========
+    async function checkPendingPaymentStatus(unitId) {
+      try {
+        const res = await fetch(`${API_URL}/payments/uploads/unit/${unitId}/pending`).catch(() => ({ ok: false }));
+        if (res.ok) {
+          const pending = await res.json();
+          if (pending && pending.length > 0) {
+            const pendingStatus = document.getElementById('paymentMsg');
+            pendingStatus.innerHTML = `<span style='color:#f59e0b'><i class="fas fa-clock"></i> You have a pending payment awaiting review.</span>`;
+          }
+        }
+      } catch (err) {
+        console.error('Error checking pending status:', err);
+      }
+    }
+
     // ========== SHOW DASHBOARD ==========
-    function showDashboard(unit) {
+    async function showDashboard(unit) {
       document.getElementById('loginSection').style.display = 'none';
       document.getElementById('mainDashboard').style.display = 'block';
       
@@ -699,7 +823,8 @@
       badge.textContent = isDue ? "PAYMENT DUE" : "CLEARED";
       badge.className = `badge ${isDue ? 'warning' : 'success'}`;
 
-      loadHistory(unit.id);
+      await loadHistory(unit.id);
+      await checkPendingPaymentStatus(unit.id);
       startSessionMonitor();
       
       console.log(`✓ Tenant dashboard loaded for ${unit.tenant_name} (Unit: ${unit.id})`);
@@ -752,18 +877,20 @@
         }
         const txLabel = tx ? `Code <b>${escapeHtml(tx)}</b>` : 'Your payment proof';
         const imageNote = result.image_uploaded ? " Screenshot uploaded." : " No screenshot uploaded.";
-        document.getElementById('paymentMsg').innerHTML = `<span style='color:#00d1b2'>✓ Success! ${txLabel} submitted for review.${imageNote}</span>`;
+        document.getElementById('paymentMsg').innerHTML = `<span style='color:#10b981'>✓ Success! ${txLabel} submitted for review.${imageNote}</span>`;
         document.getElementById('mpesaSms').value = "";
         document.getElementById('receiptImage').value = "";
         document.getElementById('txHint').textContent = "";
         
-        // Refresh the page after successful payment to update statement
+        // Refresh history to show the new pending submission
         setTimeout(() => {
-          location.reload();
-        }, 2000);
+          loadHistory(unit.id);
+          checkPendingPaymentStatus(unit.id);
+        }, 1000);
+        
       } catch (err) {
         console.error('Payment submission error:', err);
-        document.getElementById('paymentMsg').innerHTML = `<span style='color:#ff4d4d'>❌ ${escapeHtml(err.message)}</span>`;
+        document.getElementById('paymentMsg').innerHTML = `<span style='color:#ef4444'>❌ ${escapeHtml(err.message)}</span>`;
       } finally {
         isSubmittingPayment = false;
         submitBtn.innerHTML = originalText;
@@ -788,7 +915,6 @@
       document.getElementById('txHint').textContent = code ? `Detected Code: ${code}` : "";
     });
 
-    // Handle Enter key for login
     function handleLoginEnter(e) {
       if (e.key === 'Enter') {
         e.preventDefault();
