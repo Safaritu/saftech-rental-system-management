@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Caretaker Dashboard | Saftech Rental Manager</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <link rel="stylesheet" href="ui.css">
@@ -16,17 +16,35 @@
         </div>
     </div>
 
-    <div class="sidebar">
+    <!-- Mobile Menu Toggle Button -->
+    <button class="mobile-menu-toggle" id="mobileMenuToggle">
+        <i class="fas fa-bars"></i>
+    </button>
+
+    <div class="sidebar" id="sidebar">
         <div class="sidebar-header">
             <i class="fas fa-building"></i>
             <span>Saftech Pro</span>
         </div>
-        <a href="#" class="nav-item active"><i class="fas fa-th-large"></i> Dashboard</a>
-        <a href="#onboard-section" class="nav-item"><i class="fas fa-user-plus"></i> Onboard</a>
-        <a href="verify.html" class="nav-item"><i class="fas fa-check-double"></i> Verification</a>
-        <a href="settings.html" class="nav-item"><i class="fas fa-gear"></i> Settings</a>
-        <a href="login.html" class="nav-item"><i class="fas fa-sign-out-alt"></i> Logout</a>
+        <a href="#" class="nav-item active" data-section="dashboard">
+            <i class="fas fa-th-large"></i> Dashboard
+        </a>
+        <a href="#" class="nav-item" data-section="onboard">
+            <i class="fas fa-user-plus"></i> Onboard
+        </a>
+        <a href="verify.html" class="nav-item">
+            <i class="fas fa-check-double"></i> Verification
+        </a>
+        <a href="settings.html" class="nav-item">
+            <i class="fas fa-gear"></i> Settings
+        </a>
+        <a href="login.html" class="nav-item">
+            <i class="fas fa-sign-out-alt"></i> Logout
+        </a>
     </div>
+
+    <!-- Mobile Overlay for sidebar -->
+    <div class="mobile-overlay" id="mobileOverlay"></div>
 
     <div class="main-content">
         <div class="top-bar">
@@ -51,10 +69,12 @@
             </div>
         </div>
 
-        <h3>Building Grid</h3>
-        <div id="units-grid" class="unit-grid"></div>
+        <div id="dashboard-section">
+            <h3>Building Grid</h3>
+            <div id="units-grid" class="unit-grid"></div>
+        </div>
 
-        <div id="onboard-section" class="card pad" style="margin-top:20px;">
+        <div id="onboard-section" class="card pad" style="margin-top:20px; display:none;">
             <h3><i class="fas fa-user-plus"></i> Onboard New Tenant</h3>
             <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap:15px; margin-top:15px;">
                 <input type="text" id="obUnit" placeholder="Unit ID (e.g. 1A)" style="text-transform:uppercase;">
@@ -114,13 +134,65 @@
     let selectedUnit = null;
     let appSettings = { water_rate: 235, garbage_fee: 100 };
 
+    // Mobile sidebar functionality
+    const mobileToggle = document.getElementById('mobileMenuToggle');
+    const sidebar = document.getElementById('sidebar');
+    const mobileOverlay = document.getElementById('mobileOverlay');
+
+    if (mobileToggle) {
+        mobileToggle.addEventListener('click', () => {
+            sidebar.classList.toggle('mobile-open');
+            mobileOverlay.classList.toggle('active');
+            document.body.style.overflow = sidebar.classList.contains('mobile-open') ? 'hidden' : '';
+        });
+    }
+
+    if (mobileOverlay) {
+        mobileOverlay.addEventListener('click', () => {
+            sidebar.classList.remove('mobile-open');
+            mobileOverlay.classList.remove('active');
+            document.body.style.overflow = '';
+        });
+    }
+
+    // Navigation between sections
+    const navItems = document.querySelectorAll('.nav-item');
+    const dashboardSection = document.getElementById('dashboard-section');
+    const onboardSection = document.getElementById('onboard-section');
+    
+    navItems.forEach(item => {
+        item.addEventListener('click', (e) => {
+            const section = item.getAttribute('data-section');
+            if (section === 'dashboard') {
+                e.preventDefault();
+                dashboardSection.style.display = 'block';
+                onboardSection.style.display = 'none';
+                navItems.forEach(nav => nav.classList.remove('active'));
+                item.classList.add('active');
+                // Close mobile sidebar on navigation
+                sidebar.classList.remove('mobile-open');
+                mobileOverlay.classList.remove('active');
+                document.body.style.overflow = '';
+            } else if (section === 'onboard') {
+                e.preventDefault();
+                dashboardSection.style.display = 'none';
+                onboardSection.style.display = 'block';
+                navItems.forEach(nav => nav.classList.remove('active'));
+                item.classList.add('active');
+                // Close mobile sidebar on navigation
+                sidebar.classList.remove('mobile-open');
+                mobileOverlay.classList.remove('active');
+                document.body.style.overflow = '';
+            }
+        });
+    });
+
     async function safeJson(response, fallback = null) {
         const contentType = response.headers.get('content-type') || '';
         if (!response.ok || !contentType.includes('application/json')) return fallback;
         return response.json();
     }
 
-    // Load Data
     async function init() {
         try {
             const settingsRes = await fetch(`${API_URL}/settings`);
@@ -150,7 +222,6 @@
         }
     }
 
-    // Draw the building layout
     function renderUnits(units) {
         const grid = document.getElementById('units-grid');
         grid.innerHTML = '';
@@ -159,7 +230,6 @@
             const card = document.createElement('div');
             card.className = `unit-card ${!isOccupied ? 'vacant' : ''}`;
             
-            // Show total bill if it exists, otherwise show $0
             const currentBill = unit.total_bill ? Number(unit.total_bill).toLocaleString() : '0';
             const unitStatus = unit.status || (isOccupied ? 'Occupied' : 'Vacant');
             const floorLabel = Number(unit.floor) === 0 ? 'Ground Floor' : `Floor ${unit.floor ?? '-'}`;
@@ -220,8 +290,14 @@
 
     function openModal(unit) {
         if(!(unit.tenant_name && unit.tenant_name.trim() !== "")) {
-            window.location.hash = "onboard-section";
+            // Switch to onboard section and fill unit ID
+            dashboardSection.style.display = 'none';
+            onboardSection.style.display = 'block';
+            document.querySelector('.nav-item[data-section="onboard"]').classList.add('active');
+            document.querySelector('.nav-item[data-section="dashboard"]').classList.remove('active');
             document.getElementById('obUnit').value = unit.id;
+            // Scroll to onboard section
+            onboardSection.scrollIntoView({ behavior: 'smooth' });
             return;
         }
         selectedUnit = unit;
@@ -302,7 +378,7 @@
                     }
                 }
                 closeModal();
-                init(); // Refresh UI
+                init();
             } else {
                 const err = await res.json();
                 alert("Error: " + err.error);
