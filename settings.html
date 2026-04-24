@@ -2,10 +2,98 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Saftech Pro | Settings</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Saftech Pro | System Settings</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
   <link rel="stylesheet" href="ui.css" />
+  <style>
+    /* Additional settings styles */
+    .settings-section {
+      transition: all 0.2s ease;
+    }
+    .settings-card {
+      background: rgba(15, 23, 42, 0.45);
+      border: 1px solid #334155;
+      border-radius: 16px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    .settings-card:hover {
+      border-color: #00d1b2;
+    }
+    .form-group-modern {
+      margin-bottom: 16px;
+    }
+    .form-group-modern label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 0.85rem;
+      color: #94a3b8;
+    }
+    .form-group-modern input {
+      width: 100%;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid #334155;
+      background: rgba(15, 23, 42, 0.82);
+      color: #ffffff;
+      font-size: 0.95rem;
+      transition: all 0.2s;
+    }
+    .form-group-modern input:focus {
+      outline: none;
+      border-color: #00d1b2;
+      box-shadow: 0 0 0 3px rgba(0, 209, 178, 0.1);
+    }
+    .form-group-modern input:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .btn-save {
+      background: linear-gradient(135deg, #00d1b2 0%, #2563eb 100%);
+      border: none;
+      padding: 12px 24px;
+      font-weight: 600;
+    }
+    .btn-save:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 209, 178, 0.3);
+    }
+    .server-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+    }
+    .server-status.online {
+      background: rgba(34, 197, 94, 0.2);
+      color: #22c55e;
+    }
+    .server-status.offline {
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+    }
+    .warning-box {
+      background: rgba(245, 158, 11, 0.1);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      border-radius: 10px;
+      padding: 12px;
+      margin-top: 15px;
+    }
+    @media (max-width: 768px) {
+      .settings-card {
+        padding: 15px;
+      }
+      .row {
+        flex-direction: column;
+      }
+      .btn-save {
+        width: 100%;
+      }
+    }
+  </style>
 </head>
 <body>
   <div class="app">
@@ -18,11 +106,10 @@
         </div>
       </div>
       <nav class="nav">
-        <a href="index.html"><i class="fa-solid fa-gauge-high"></i> Dashboard</a>
+        <a href="dashboard.html"><i class="fa-solid fa-gauge-high"></i> Dashboard</a>
         <a href="verify.html"><i class="fa-solid fa-check-double"></i> Verification</a>
         <a class="active" href="settings.html"><i class="fa-solid fa-gear"></i> Settings</a>
-        <a href="tenant.html"><i class="fa-solid fa-house-user"></i> Tenant Portal</a>
-        <a href="login.html" id="navLogout"><i class="fa-solid fa-right-from-bracket"></i> Logout</a>
+        <a href="#" id="navLogout"><i class="fa-solid fa-right-from-bracket"></i> Logout</a>
       </nav>
       <div class="footer" id="footerMeta"></div>
     </aside>
@@ -35,83 +122,117 @@
           </div>
           <div>
             <div style="font-weight:900;">Saftech Pro</div>
-            <div class="muted small">Settings</div>
+            <div class="muted small">System Settings</div>
           </div>
         </div>
-        <a class="btn btn-icon ghost" href="index.html" title="Back">
-          <i class="fa-solid fa-arrow-left"></i>
-        </a>
+        <div class="row" style="gap:10px;">
+          <span id="serverStatusIndicator" class="server-status online">
+            <i class="fa-solid fa-circle"></i> Online
+          </span>
+          <a class="btn btn-icon ghost" href="dashboard.html" title="Back to Dashboard">
+            <i class="fa-solid fa-arrow-left"></i>
+          </a>
+        </div>
       </div>
 
       <div class="panel pad">
-        <div class="h1">Global Settings</div>
+        <div class="h1"><i class="fa-solid fa-sliders-h"></i> System Configuration</div>
         <div class="muted small" style="margin-top:6px;">
-          These values drive billing: \((\text{current}-\text{previous})\times\text{waterRate} + \text{garbage} + \text{rent}\).
+          Configure global settings that drive billing calculations: 
+          <strong>Bill = (Current - Previous) × Water Rate + Garbage Fee + Base Rent</strong>
         </div>
       </div>
 
-      <div class="row" style="margin-top:14px;align-items:stretch;">
-        <div class="panel pad" style="flex:1;min-width:300px;">
-          <div class="h2"><i class="fa-solid fa-warehouse"></i> Property Info</div>
-          <div class="row" style="margin-top:12px;">
-            <div class="grow">
-              <label class="small muted">Property Name</label>
-              <input id="propertyName" type="text" placeholder="e.g. Saftech Resolutions Apartments" style="margin-top:6px;" />
-            </div>
-            <div class="grow">
-              <label class="small muted">Location</label>
-              <input id="propertyLocation" type="text" placeholder="e.g. Nairobi" style="margin-top:6px;" />
-            </div>
+      <div class="row" style="margin-top:14px;align-items:stretch; gap: 20px;">
+        <!-- Property Information Section -->
+        <div class="settings-card" style="flex:1; min-width:280px;">
+          <div class="h2"><i class="fa-solid fa-warehouse"></i> Property Information</div>
+          <div class="form-group-modern" style="margin-top:16px;">
+            <label><i class="fa-solid fa-building"></i> Property Name</label>
+            <input id="propertyName" type="text" placeholder="e.g., Saftech Resolutions Apartments" />
           </div>
-          <div class="row" style="margin-top:12px;">
-            <div class="grow">
-              <label class="small muted">Caretaker Name</label>
-              <input id="caretakerName" type="text" placeholder="Caretaker" style="margin-top:6px;" />
-            </div>
-            <div class="grow">
-              <label class="small muted">Caretaker Phone</label>
-              <input id="caretakerPhone" type="tel" placeholder="07XXXXXXXX" style="margin-top:6px;" />
-            </div>
+          <div class="form-group-modern">
+            <label><i class="fa-solid fa-location-dot"></i> Location</label>
+            <input id="propertyLocation" type="text" placeholder="e.g., Nairobi, Kenya" />
+          </div>
+          <div class="form-group-modern">
+            <label><i class="fa-solid fa-user-tie"></i> Caretaker Name</label>
+            <input id="caretakerName" type="text" placeholder="Full name" />
+          </div>
+          <div class="form-group-modern">
+            <label><i class="fa-solid fa-phone"></i> Caretaker Phone</label>
+            <input id="caretakerPhone" type="tel" placeholder="07XXXXXXXX" />
           </div>
         </div>
 
-        <div class="panel pad" style="flex:1;min-width:300px;">
-          <div class="h2"><i class="fa-solid fa-sliders"></i> Billing Config</div>
-          <div class="row" style="margin-top:12px;">
-            <div class="grow">
-              <label class="small muted">Water Rate (KES per m³)</label>
-              <input id="waterRate" type="number" inputmode="numeric" placeholder="235" style="margin-top:6px;" />
-            </div>
-            <div class="grow">
-              <label class="small muted">Monthly Garbage (KES)</label>
-              <input id="garbageFee" type="number" inputmode="numeric" placeholder="100" style="margin-top:6px;" />
-            </div>
+        <!-- Billing Configuration Section -->
+        <div class="settings-card" style="flex:1; min-width:280px;">
+          <div class="h2"><i class="fa-solid fa-calculator"></i> Billing Configuration</div>
+          <div class="form-group-modern" style="margin-top:16px;">
+            <label><i class="fa-solid fa-tint"></i> Water Rate (KES per m³)</label>
+            <input id="waterRate" type="number" step="0.01" placeholder="235" />
+            <div class="muted small" style="margin-top:4px;">Current water usage charge per cubic meter</div>
           </div>
-          <div style="margin-top:12px;">
-            <label class="small muted">Staff PIN (demo)</label>
-            <input id="staffPin" type="password" inputmode="numeric" placeholder="1234" style="margin-top:6px;" />
+          <div class="form-group-modern">
+            <label><i class="fa-solid fa-trash"></i> Monthly Garbage Fee (KES)</label>
+            <input id="garbageFee" type="number" step="0.01" placeholder="100" />
+            <div class="muted small" style="margin-top:4px;">Fixed monthly waste management fee</div>
           </div>
-          <div class="row" style="margin-top:12px;">
-            <button class="btn primary grow" id="btnSave" type="button">
-              <i class="fa-solid fa-floppy-disk"></i>
-              Save Settings
+          <div class="form-group-modern">
+            <label><i class="fa-solid fa-lock"></i> Caretaker PIN</label>
+            <input id="staffPin" type="password" placeholder="****" autocomplete="new-password" />
+            <div class="muted small" style="margin-top:4px;">Used for caretaker login authentication</div>
+          </div>
+          
+          <div class="warning-box">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+            <strong>Note:</strong> Changes to billing settings will affect all future bill calculations.
+          </div>
+          
+          <div class="row" style="margin-top:20px; gap:12px;">
+            <button class="btn primary grow btn-save" id="btnSave">
+              <i class="fa-solid fa-floppy-disk"></i> Save Settings
             </button>
-            <a class="btn ghost" href="index.html"><i class="fa-solid fa-gauge-high"></i> Dashboard</a>
+            <button class="btn ghost" id="btnTestConnection">
+              <i class="fa-solid fa-plug"></i> Test Connection
+            </button>
           </div>
-          <div class="hr" style="margin-top:14px;"></div>
-          <div class="h2"><i class="fa-solid fa-message"></i> Reminder Queue</div>
-          <div class="row" style="margin-top:10px;">
-            <div class="grow">
-              <label class="small muted">Queue reminders for tenants due by date</label>
-              <input id="reminderDate" type="date" style="margin-top:6px;" />
+          <div id="saveMsg" class="muted small" style="margin-top:12px;"></div>
+        </div>
+
+        <!-- Reminder Queue Section -->
+        <div class="settings-card" style="flex:1; min-width:280px;">
+          <div class="h2"><i class="fa-solid fa-bell"></i> Reminder Queue</div>
+          <div class="muted small" style="margin-bottom:16px;">
+            Schedule SMS reminders for tenants with outstanding balances
+          </div>
+          <div class="form-group-modern">
+            <label><i class="fa-solid fa-calendar-day"></i> Due Date</label>
+            <input id="reminderDate" type="date" />
+            <div class="muted small" style="margin-top:4px;">Select the due date for rent collection</div>
+          </div>
+          <button class="btn ghost" id="btnQueueReminders" style="width:100%; margin-top:8px;">
+            <i class="fa-solid fa-paper-plane"></i> Queue Reminder Messages
+          </button>
+          <div id="reminderMsg" class="muted small" style="margin-top:12px;"></div>
+          
+          <div class="hr" style="margin:20px 0;"></div>
+          
+          <div class="h2"><i class="fa-solid fa-chart-line"></i> System Status</div>
+          <div style="margin-top:12px;">
+            <div class="row" style="justify-content: space-between; margin-bottom:8px;">
+              <span class="muted small">API Status:</span>
+              <span id="apiStatus" class="small" style="color:#22c55e;">Connected</span>
             </div>
-            <div style="display:flex; align-items:flex-end;">
-              <button class="btn ghost" id="btnQueueReminders" type="button">
-                <i class="fa-solid fa-paper-plane"></i> Queue Reminders
-              </button>
+            <div class="row" style="justify-content: space-between; margin-bottom:8px;">
+              <span class="muted small">Last Sync:</span>
+              <span id="lastSync" class="small">--</span>
+            </div>
+            <div class="row" style="justify-content: space-between;">
+              <span class="muted small">Session Role:</span>
+              <span id="sessionRole" class="small">--</span>
             </div>
           </div>
-          <div class="muted small" id="msg" style="margin-top:10px;"></div>
         </div>
       </div>
     </main>
@@ -120,81 +241,301 @@
   <script src="api-config.js"></script>
   <script>
     const API_URL = window.SAFTECH_API_URL;
+    let autoSaveTimeout = null;
 
-    const el = (id) => document.getElementById(id);
-    const msg = el("msg");
+    // ========== AUTHENTICATION CHECK ==========
+    (function checkAuthentication() {
+        const role = localStorage.getItem('saftech_role');
+        const loginTime = localStorage.getItem('saftech_login_time');
+        
+        // Only caretakers can access settings page
+        if (role !== 'caretaker') {
+            console.warn('Unauthorized access attempt to settings page');
+            if (role === 'tenant') {
+                window.location.href = 'tenant.html';
+            } else {
+                window.location.href = 'index.html';
+            }
+            return;
+        }
+        
+        // Check session age (8 hour timeout)
+        if (loginTime) {
+            const elapsed = Date.now() - parseInt(loginTime);
+            const eightHours = 8 * 60 * 60 * 1000;
+            if (elapsed > eightHours) {
+                console.warn('Session expired');
+                window.logout();
+                return;
+            }
+        }
+        
+        // Update footer and session info
+        document.getElementById('footerMeta').textContent = `Caretaker • Live Mode • ${new Date().toLocaleDateString()}`;
+        document.getElementById('sessionRole').textContent = 'Caretaker';
+        document.getElementById('lastSync').textContent = new Date().toLocaleTimeString();
+        
+        console.log('✓ Settings page accessed by caretaker');
+    })();
 
-    async function load() {
-      const role = localStorage.getItem("saftech_role") || "staff";
-      el("footerMeta").textContent = `User: ${role} • Live API mode`;
-      const response = await fetch(`${API_URL}/settings`);
-      const s = await response.json();
+    // ========== LOGOUT FUNCTIONALITY ==========
+    document.getElementById('navLogout').addEventListener('click', (e) => {
+        e.preventDefault();
+        if (confirm('Are you sure you want to logout?')) {
+            window.logout();
+        }
+    });
 
-      el("propertyName").value = s.property_name || "";
-      el("propertyLocation").value = s.property_location || "";
-      el("caretakerName").value = s.caretaker_name || "";
-      el("caretakerPhone").value = s.caretaker_phone || "";
-      el("waterRate").value = Number(s.water_rate ?? 235);
-      el("garbageFee").value = Number(s.garbage_fee ?? 100);
-      el("staffPin").value = String(s.staff_pin || "1234");
+    // ========== CHECK SERVER STATUS ==========
+    async function checkServerConnection() {
+        const statusIndicator = document.getElementById('serverStatusIndicator');
+        const apiStatus = document.getElementById('apiStatus');
+        
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3000);
+            const response = await fetch(`${API_URL}/settings`, { signal: controller.signal });
+            clearTimeout(timeoutId);
+            
+            if (response.ok) {
+                statusIndicator.className = 'server-status online';
+                statusIndicator.innerHTML = '<i class="fa-solid fa-circle"></i> Online';
+                apiStatus.innerHTML = '<span style="color:#22c55e;">Connected</span>';
+                apiStatus.style.color = '#22c55e';
+                return true;
+            } else {
+                throw new Error('Server responded with error');
+            }
+        } catch (error) {
+            console.error('Server connection error:', error);
+            statusIndicator.className = 'server-status offline';
+            statusIndicator.innerHTML = '<i class="fa-solid fa-circle"></i> Offline';
+            apiStatus.innerHTML = '<span style="color:#ef4444;">Disconnected</span>';
+            apiStatus.style.color = '#ef4444';
+            return false;
+        }
     }
 
-    el("btnSave").addEventListener("click", async () => {
-      try {
-        const waterRate = Number(el("waterRate").value);
-        const garbageFee = Number(el("garbageFee").value);
-        if (!Number.isFinite(waterRate) || waterRate <= 0) throw new Error("Water rate must be a number > 0.");
-        if (!Number.isFinite(garbageFee) || garbageFee < 0) throw new Error("Garbage must be a number ≥ 0.");
+    // ========== TEST CONNECTION BUTTON ==========
+    document.getElementById('btnTestConnection').addEventListener('click', async () => {
+        const btn = document.getElementById('btnTestConnection');
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Testing...';
+        btn.disabled = true;
+        
+        const isConnected = await checkServerConnection();
+        
+        setTimeout(() => {
+            if (isConnected) {
+                showMessage('saveMsg', '✅ Server connection successful!', 'success');
+            } else {
+                showMessage('saveMsg', '❌ Server connection failed. Please check your network.', 'error');
+            }
+            btn.innerHTML = originalText;
+            btn.disabled = false;
+        }, 500);
+    });
 
-        const res = await fetch(`${API_URL}/settings`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            property_name: el("propertyName").value.trim(),
-            property_location: el("propertyLocation").value.trim(),
-            caretaker_name: el("caretakerName").value.trim(),
-            caretaker_phone: el("caretakerPhone").value.trim(),
-            water_rate: waterRate,
-            garbage_fee: garbageFee,
-            staff_pin: el("staffPin").value.trim() || "1234"
-          })
+    // ========== HELPER FUNCTIONS ==========
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/[&<>]/g, function(m) {
+            if (m === '&') return '&amp;';
+            if (m === '<') return '&lt;';
+            if (m === '>') return '&gt;';
+            return m;
         });
-        if (!res.ok) throw new Error("Failed to save settings");
+    }
 
-        msg.textContent = "Saved. Dashboard and billing now use these settings.";
-        msg.style.color = "var(--success)";
-      } catch (e) {
-        msg.textContent = e?.message || "Failed to save.";
-        msg.style.color = "var(--warning)";
-      }
+    function showMessage(elementId, message, type = 'success') {
+        const msgEl = document.getElementById(elementId);
+        msgEl.innerHTML = `<span style="color: ${type === 'success' ? '#10b981' : '#ef4444'}">
+            <i class="fa-solid fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'}"></i> ${escapeHtml(message)}
+        </span>`;
+        
+        setTimeout(() => {
+            if (msgEl.innerHTML) {
+                msgEl.innerHTML = '';
+            }
+        }, 5000);
+    }
+
+    // ========== LOAD SETTINGS ==========
+    async function loadSettings() {
+        try {
+            const response = await fetch(`${API_URL}/settings`);
+            if (!response.ok) throw new Error('Failed to load settings');
+            const settings = await response.json();
+
+            document.getElementById("propertyName").value = settings.property_name || "";
+            document.getElementById("propertyLocation").value = settings.property_location || "";
+            document.getElementById("caretakerName").value = settings.caretaker_name || "";
+            document.getElementById("caretakerPhone").value = settings.caretaker_phone || "";
+            document.getElementById("waterRate").value = Number(settings.water_rate ?? 235);
+            document.getElementById("garbageFee").value = Number(settings.garbage_fee ?? 100);
+            document.getElementById("staffPin").value = "********"; // Masked for security
+            
+            console.log('✓ Settings loaded successfully');
+        } catch (error) {
+            console.error('Error loading settings:', error);
+            showMessage('saveMsg', 'Failed to load settings. Please check connection.', 'error');
+        }
+    }
+
+    // ========== VALIDATE SETTINGS ==========
+    function validateSettings() {
+        const waterRate = Number(document.getElementById("waterRate").value);
+        const garbageFee = Number(document.getElementById("garbageFee").value);
+        const propertyName = document.getElementById("propertyName").value.trim();
+        
+        if (!Number.isFinite(waterRate) || waterRate <= 0) {
+            throw new Error("Water rate must be a positive number.");
+        }
+        if (!Number.isFinite(garbageFee) || garbageFee < 0) {
+            throw new Error("Garbage fee must be a positive number or zero.");
+        }
+        if (!propertyName) {
+            throw new Error("Property name is required.");
+        }
+        
+        return { waterRate, garbageFee };
+    }
+
+    // ========== SAVE SETTINGS ==========
+    async function saveSettings() {
+        const saveBtn = document.getElementById('btnSave');
+        const originalText = saveBtn.innerHTML;
+        saveBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Saving...';
+        saveBtn.disabled = true;
+        
+        try {
+            // Validate inputs
+            const { waterRate, garbageFee } = validateSettings();
+            
+            const settingsData = {
+                property_name: document.getElementById("propertyName").value.trim(),
+                property_location: document.getElementById("propertyLocation").value.trim(),
+                caretaker_name: document.getElementById("caretakerName").value.trim(),
+                caretaker_phone: document.getElementById("caretakerPhone").value.trim(),
+                water_rate: waterRate,
+                garbage_fee: garbageFee,
+                // Only send staff pin if it's been changed (not the masked placeholder)
+                staff_pin: document.getElementById("staffPin").value !== "********" 
+                    ? document.getElementById("staffPin").value.trim() 
+                    : undefined
+            };
+            
+            // Remove undefined values
+            Object.keys(settingsData).forEach(key => 
+                settingsData[key] === undefined && delete settingsData[key]
+            );
+            
+            const response = await fetch(`${API_URL}/settings`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(settingsData)
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || "Failed to save settings");
+            }
+            
+            showMessage('saveMsg', '✅ Settings saved successfully! Billing configuration updated.', 'success');
+            
+            // Reload settings to refresh masked PIN
+            await loadSettings();
+            
+            // Update last sync time
+            document.getElementById('lastSync').textContent = new Date().toLocaleTimeString();
+            
+            console.log('✓ Settings saved successfully');
+            
+        } catch (error) {
+            console.error('Error saving settings:', error);
+            showMessage('saveMsg', error.message || 'Failed to save settings. Please try again.', 'error');
+        } finally {
+            saveBtn.innerHTML = originalText;
+            saveBtn.disabled = false;
+        }
+    }
+
+    // ========== QUEUE REMINDERS ==========
+    async function queueReminders() {
+        const dueDate = document.getElementById("reminderDate").value;
+        const queueBtn = document.getElementById('btnQueueReminders');
+        const originalText = queueBtn.innerHTML;
+        
+        if (!dueDate) {
+            showMessage('reminderMsg', '❌ Please select a due date first.', 'error');
+            return;
+        }
+        
+        queueBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing...';
+        queueBtn.disabled = true;
+        
+        try {
+            const response = await fetch(`${API_URL}/notifications/reminders/queue`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ dueDate })
+            });
+            
+            const payload = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(payload.error || "Could not queue reminders.");
+            }
+            
+            const message = `✅ Queued ${payload.queued || 0} reminder message(s) for due date ${dueDate}.`;
+            showMessage('reminderMsg', message, 'success');
+            
+            // Clear the date field after successful queue
+            document.getElementById("reminderDate").value = '';
+            
+            console.log('✓ Reminders queued successfully');
+            
+        } catch (error) {
+            console.error('Error queueing reminders:', error);
+            showMessage('reminderMsg', error.message || 'Failed to queue reminders.', 'error');
+        } finally {
+            queueBtn.innerHTML = originalText;
+            queueBtn.disabled = false;
+        }
+    }
+
+    // ========== EVENT LISTENERS ==========
+    document.getElementById("btnSave").addEventListener("click", saveSettings);
+    document.getElementById("btnQueueReminders").addEventListener("click", queueReminders);
+    
+    // Auto-save indicator on input change (optional feature)
+    const settingsInputs = ['propertyName', 'propertyLocation', 'caretakerName', 'caretakerPhone', 'waterRate', 'garbageFee'];
+    settingsInputs.forEach(inputId => {
+        const input = document.getElementById(inputId);
+        if (input) {
+            input.addEventListener('change', () => {
+                const saveMsg = document.getElementById('saveMsg');
+                saveMsg.innerHTML = '<span style="color: #f59e0b;"><i class="fa-solid fa-info-circle"></i> Settings changed. Click Save to apply.</span>';
+                setTimeout(() => {
+                    if (saveMsg.innerHTML.includes('Settings changed')) {
+                        saveMsg.innerHTML = '';
+                    }
+                }, 3000);
+            });
+        }
     });
 
-    el("btnQueueReminders").addEventListener("click", async () => {
-      try {
-        const dueDate = el("reminderDate").value;
-        if (!dueDate) throw new Error("Select a date first.");
-        const res = await fetch(`${API_URL}/notifications/reminders/queue`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ dueDate })
-        });
-        const payload = await res.json();
-        if (!res.ok) throw new Error(payload.error || "Could not queue reminders.");
-        msg.textContent = `Queued ${payload.queued} reminder message(s) for due date ${dueDate}.`;
-        msg.style.color = "var(--success)";
-      } catch (e) {
-        msg.textContent = e?.message || "Failed to queue reminders.";
-        msg.style.color = "var(--warning)";
-      }
-    });
-
-    document.getElementById("navLogout").addEventListener("click", (e) => {
-      e.preventDefault();
-      localStorage.removeItem("saftech_role");
-      window.location.href = "login.html";
-    });
-
-    load();
+    // ========== PERIODIC CONNECTION CHECK ==========
+    setInterval(checkServerConnection, 30000);
+    
+    // ========== INITIALIZATION ==========
+    async function init() {
+        await checkServerConnection();
+        await loadSettings();
+        console.log('✓ Settings page initialized');
+    }
+    
+    init();
   </script>
 </body>
 </html>
