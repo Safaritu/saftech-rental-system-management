@@ -6,6 +6,39 @@
   <title>Saftech Pro | Login</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
   <link rel="stylesheet" href="ui.css" />
+  <style>
+    /* Additional security indicator styles */
+    .security-badge {
+      position: fixed;
+      bottom: 10px;
+      right: 10px;
+      font-size: 11px;
+      color: #64748b;
+      background: rgba(0,0,0,0.05);
+      padding: 4px 8px;
+      border-radius: 20px;
+      pointer-events: none;
+      z-index: 1000;
+    }
+    .login-loading {
+      opacity: 0.7;
+      pointer-events: none;
+    }
+    .spinner-small {
+      display: inline-block;
+      width: 14px;
+      height: 14px;
+      border: 2px solid #f3f3f3;
+      border-top: 2px solid #2563eb;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-right: 8px;
+    }
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
 </head>
 <body>
   <div style="max-width:420px; margin: 60px auto; padding: 25px;" class="card">
@@ -14,42 +47,78 @@
     <hr style="margin: 20px 0; border: 0; border-top: 1px solid #eee;">
 
     <div style="background: #fef9c3; border: 1px solid #facc15; padding: 10px; border-radius: 8px; font-size: 12px; margin-bottom: 15px; text-align: center;">
-      <strong>Caretaker:</strong> Leave Unit blank and enter caretaker password.
+      <i class="fa-solid fa-key"></i> <strong>Caretaker:</strong> Leave Unit blank and enter caretaker password.
     </div>
 
     <div class="form-group">
-      <label>Unit Number (Leave blank for Caretaker)</label>
-      <input type="text" id="unitNumber" class="form-control" placeholder="e.g. 1A" style="width:100%; padding:10px; margin-bottom:15px; border-radius:8px; border:1px solid #ccc;">
+      <label><i class="fa-solid fa-hashtag"></i> Unit Number <span style="color:#64748b; font-weight:normal;">(Leave blank for Caretaker)</span></label>
+      <input type="text" id="unitNumber" class="form-control" placeholder="e.g. 1A" style="width:100%; padding:10px; margin-bottom:15px; border-radius:8px; border:1px solid #ccc;" autocomplete="off">
     </div>
 
     <div class="form-group">
-      <label>Phone Number</label>
-      <input type="tel" id="phoneNumber" class="form-control" placeholder="0712345678" style="width:100%; padding:10px; margin-bottom:15px; border-radius:8px; border:1px solid #ccc;">
+      <label><i class="fa-solid fa-phone"></i> Phone Number</label>
+      <input type="tel" id="phoneNumber" class="form-control" placeholder="0712345678" style="width:100%; padding:10px; margin-bottom:15px; border-radius:8px; border:1px solid #ccc;" autocomplete="off">
     </div>
 
     <div class="form-group">
-      <label>Password (Caretakers only)</label>
-      <input type="password" id="password" class="form-control" style="width:100%; padding:10px; margin-bottom:15px; border-radius:8px; border:1px solid #ccc;">
+      <label><i class="fa-solid fa-lock"></i> Password <span style="color:#64748b; font-weight:normal;">(Caretakers only)</span></label>
+      <input type="password" id="password" class="form-control" style="width:100%; padding:10px; margin-bottom:15px; border-radius:8px; border:1px solid #ccc;" autocomplete="off">
     </div>
 
     <button id="loginBtn" style="width:100%; padding:14px; background:#2563eb; color:white; border:none; border-radius:8px; cursor:pointer; font-weight:bold;">
-      Sign In
+      <i class="fa-solid fa-sign-in-alt"></i> Sign In
     </button>
     
     <div id="errorMsg" style="color:red; display:none; margin-top:15px; text-align:center; background:#fee2e2; padding:10px; border-radius:8px;"></div>
     <div id="successMsg" style="color:green; display:none; margin-top:15px; text-align:center; background:#dcfce7; padding:10px; border-radius:8px;"></div>
   </div>
+  
+  <div class="security-badge">
+    <i class="fa-solid fa-shield-haltered"></i> Secure Connection
+  </div>
 
   <script src="api-config.js"></script>
   <script>
     const API_URL = window.SAFTECH_API_URL;
+    let isLoggingIn = false;
+    
+    // Clear any existing sessions when loading login page
+    (function clearExistingSessions() {
+      localStorage.removeItem('saftech_role');
+      sessionStorage.removeItem('activeUnit');
+      sessionStorage.removeItem('redirectAfterLogin');
+      console.log('✓ Session cleared for fresh login');
+    })();
 
-    function setText(id, message) {
+    function setText(id, message, isError = false) {
       const el = document.getElementById(id);
-      el.textContent = message;
+      el.innerHTML = message;
       el.style.display = 'block';
       const other = id === 'errorMsg' ? 'successMsg' : 'errorMsg';
       document.getElementById(other).style.display = 'none';
+      
+      // Auto-hide after 5 seconds for errors, 3 seconds for success
+      const duration = isError ? 5000 : 3000;
+      setTimeout(() => {
+        if (document.getElementById(id).style.display === 'block') {
+          document.getElementById(id).style.display = 'none';
+        }
+      }, duration);
+    }
+    
+    function showLoading(show) {
+      const btn = document.getElementById('loginBtn');
+      if (show) {
+        btn.innerHTML = '<span class="spinner-small"></span> Authenticating...';
+        btn.disabled = true;
+        btn.style.opacity = '0.7';
+        btn.style.cursor = 'not-allowed';
+      } else {
+        btn.innerHTML = '<i class="fa-solid fa-sign-in-alt"></i> Sign In';
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.style.cursor = 'pointer';
+      }
     }
 
     async function checkServer() {
@@ -58,51 +127,161 @@
         const timeoutId = setTimeout(() => controller.abort(), 2000);
         await fetch(`${API_URL}/units`, { signal: controller.signal }); 
         document.getElementById('serverStatus').innerHTML = '<i class="fa-solid fa-circle" style="color:green"></i> SERVER ONLINE';
+        document.getElementById('serverStatus').style.color = '#22c55e';
       } catch (e) {
         document.getElementById('serverStatus').innerHTML = '<i class="fa-solid fa-circle" style="color:red"></i> SERVER OFFLINE';
+        document.getElementById('serverStatus').style.color = '#ef4444';
       }
     }
+    
+    // Check server status periodically
     checkServer();
+    setInterval(checkServer, 30000); // Check every 30 seconds
+
+    // Handle Enter key press for login
+    function handleEnterKey(e) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        document.getElementById('loginBtn').click();
+      }
+    }
+    
+    document.getElementById('unitNumber').addEventListener('keypress', handleEnterKey);
+    document.getElementById('phoneNumber').addEventListener('keypress', handleEnterKey);
+    document.getElementById('password').addEventListener('keypress', handleEnterKey);
 
     document.getElementById('loginBtn').addEventListener('click', async () => {
+      // Prevent multiple login attempts
+      if (isLoggingIn) {
+        setText('errorMsg', 'Login already in progress. Please wait...', true);
+        return;
+      }
+      
       const unitId = document.getElementById('unitNumber').value.trim().toUpperCase();
       const phone = document.getElementById('phoneNumber').value.trim();
       const password = document.getElementById('password').value.trim();
 
+      // Validate inputs based on login type
+      if (unitId === "" && !password) {
+        setText('errorMsg', 'Please enter caretaker password for admin access.', true);
+        return;
+      }
+      
+      if (unitId !== "" && !phone) {
+        setText('errorMsg', 'Phone number is required for tenant login.', true);
+        return;
+      }
+
+      isLoggingIn = true;
+      showLoading(true);
+
       try {
+        // CARETAKER LOGIN
         if (unitId === "") {
           const settingsRes = await fetch(`${API_URL}/settings`);
+          if (!settingsRes.ok) {
+            throw new Error('Failed to fetch settings');
+          }
           const settings = await settingsRes.json();
           const expectedPin = String(settings.staff_pin || "1234");
+          
           if (!password || password !== expectedPin) {
-            return setText('errorMsg', 'Invalid caretaker password.');
+            setText('errorMsg', '❌ Invalid caretaker password. Please try again.', true);
+            showLoading(false);
+            isLoggingIn = false;
+            return;
           }
+          
+          // Clear any existing tenant data
+          sessionStorage.removeItem('activeUnit');
+          // Set caretaker role
           localStorage.setItem("saftech_role", "caretaker");
-          setText('successMsg', 'Caretaker login successful.');
-          setTimeout(() => { window.location.href = 'dashboard.html'; }, 700);
+          localStorage.setItem("saftech_login_time", Date.now().toString());
+          
+          setText('successMsg', '✓ Caretaker login successful! Redirecting to dashboard...');
+          
+          // Log successful login
+          console.log('✓ Caretaker logged in at:', new Date().toISOString());
+          
+          setTimeout(() => { 
+            window.location.href = 'dashboard.html'; 
+          }, 700);
           return;
         }
 
+        // TENANT LOGIN
         if (!phone) {
-          return setText('errorMsg', 'Phone number is required for tenant login.');
+          setText('errorMsg', '❌ Phone number is required for tenant login.', true);
+          showLoading(false);
+          isLoggingIn = false;
+          return;
         }
 
         const res = await fetch(`${API_URL}/units`);
+        if (!res.ok) {
+          throw new Error('Failed to fetch units');
+        }
         const units = await res.json();
         const unit = units.find(
           (u) => String(u.id).toUpperCase() === unitId && String(u.tenant_phone || '').trim() === phone
         );
+        
         if (!unit) {
-          return setText('errorMsg', 'Tenant details do not match our records.');
+          setText('errorMsg', '❌ Tenant details do not match our records. Please contact management.', true);
+          showLoading(false);
+          isLoggingIn = false;
+          return;
+        }
+        
+        // Check if unit has a tenant
+        if (!unit.tenant_name || unit.tenant_name.trim() === "") {
+          setText('errorMsg', '❌ This unit is not currently occupied. Please contact management.', true);
+          showLoading(false);
+          isLoggingIn = false;
+          return;
         }
 
+        // Store tenant session
         sessionStorage.setItem('activeUnit', JSON.stringify(unit));
         localStorage.setItem("saftech_role", "tenant");
-        setText('successMsg', 'Tenant login successful.');
-        setTimeout(() => { window.location.href = 'tenant.html'; }, 700);
-      } catch (_err) {
-        setText('errorMsg', 'Login failed. Check server connection.');
+        localStorage.setItem("saftech_login_time", Date.now().toString());
+        
+        setText('successMsg', `✓ Welcome back ${unit.tenant_name}! Redirecting to your portal...`);
+        
+        // Log successful login
+        console.log(`✓ Tenant ${unit.tenant_name} (Unit: ${unit.id}) logged in at:`, new Date().toISOString());
+        
+        setTimeout(() => { 
+          window.location.href = 'tenant.html'; 
+        }, 700);
+        
+      } catch (error) {
+        console.error('Login error:', error);
+        setText('errorMsg', '❌ Login failed. Please check your connection and try again.', true);
+        showLoading(false);
+        isLoggingIn = false;
+      } finally {
+        // Reset loading state after timeout (in case of issues)
+        setTimeout(() => {
+          if (isLoggingIn) {
+            showLoading(false);
+            isLoggingIn = false;
+          }
+        }, 10000);
       }
+    });
+    
+    // Add visual feedback for input fields
+    const inputs = document.querySelectorAll('input');
+    inputs.forEach(input => {
+      input.addEventListener('focus', function() {
+        this.style.borderColor = '#2563eb';
+        this.style.boxShadow = '0 0 0 2px rgba(37,99,235,0.1)';
+      });
+      input.addEventListener('blur', function() {
+        this.style.borderColor = '#ccc';
+        this.style.boxShadow = 'none';
+      });
     });
   </script>
 </body>
