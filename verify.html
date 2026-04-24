@@ -2,224 +2,582 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>SAFTECH | Payment Verification</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>SAFTECH | Payment Verification Portal</title>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
   <link rel="stylesheet" href="ui.css">
+  <style>
+    /* Additional styles for verification portal */
+    .verification-stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+    .stat-card {
+      background: rgba(15, 23, 42, 0.45);
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 15px;
+      text-align: center;
+    }
+    .stat-card .stat-value {
+      font-size: 1.8rem;
+      font-weight: bold;
+      color: #00d1b2;
+    }
+    .stat-card .stat-label {
+      font-size: 0.85rem;
+      color: #94a3b8;
+      margin-top: 5px;
+    }
+    .verification-item {
+      transition: all 0.2s ease;
+    }
+    .verification-item:hover {
+      border-color: #00d1b2;
+      transform: translateX(4px);
+    }
+    .proof-image {
+      max-width: 180px;
+      border-radius: 8px;
+      border: 1px solid #334155;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    .proof-image:hover {
+      transform: scale(1.05);
+    }
+    .status-badge {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .status-pending {
+      background: rgba(245, 158, 11, 0.2);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+    .status-approved {
+      background: rgba(16, 185, 129, 0.2);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    .status-rejected {
+      background: rgba(239, 68, 68, 0.2);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+    .refresh-btn {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: #2563eb;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      cursor: pointer;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+      transition: all 0.2s;
+      z-index: 100;
+    }
+    .refresh-btn:hover {
+      transform: scale(1.1);
+      background: #1d4ed8;
+    }
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.8);
+      z-index: 1000;
+      justify-content: center;
+      align-items: center;
+    }
+    .modal-content {
+      max-width: 90%;
+      max-height: 90%;
+      background: #0f172a;
+      border-radius: 12px;
+      padding: 20px;
+    }
+    .modal-content img {
+      max-width: 100%;
+      max-height: 80vh;
+      border-radius: 8px;
+    }
+    @media (max-width: 768px) {
+      .verification-stats {
+        grid-template-columns: 1fr;
+      }
+      .proof-image {
+        max-width: 120px;
+      }
+    }
+  </style>
 </head>
 <body style="padding: 20px; display: flex; justify-content: center;">
   
-  <div style="width: 100%; max-width: 900px;">
-    <div class="panel pad">
-      <div class="row" style="justify-content: space-between;">
-        <div class="row" style="gap:15px;">
-          <div class="logo"><i class="fa-solid fa-check-double"></i></div>
-          <div>
-            <div class="h1">Payment Verification</div>
-            <div class="muted small">Review and approve tenant M-Pesa payments</div>
-          </div>
-        </div>
-        <a href="index.html" class="btn ghost"><i class="fa-solid fa-arrow-left"></i> Back</a>
-      </div>
-    </div>
-
-    <div class="panel pad" style="margin-top: 20px;">
-      <div class="h2">Pending Clearances</div>
-      <div id="verifyList" style="margin-top: 15px;">
-        <p class="muted">Scanning for unpaid bills...</p>
-      </div>
-    </div>
-
-    <div class="panel pad" style="margin-top: 20px;">
-      <div class="h2">Tenant Uploads Queue (FIFO)</div>
-      <div id="uploadList" style="margin-top: 15px;">
-        <p class="muted">Loading tenant uploads...</p>
-      </div>
-    </div>
-
-    <div class="panel pad" style="margin-top: 20px;">
-      <div class="h2">All Tenant Upload Records</div>
-      <div id="uploadTable" style="margin-top: 15px;">
-        <p class="muted">Loading upload records...</p>
+  <!-- Image Modal -->
+  <div id="imageModal" class="modal" onclick="closeImageModal()">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <img id="modalImage" src="" alt="Full size receipt">
+      <div style="text-align: center; margin-top: 15px;">
+        <button class="btn btn-secondary" onclick="closeImageModal()">Close</button>
       </div>
     </div>
   </div>
+
+  <div style="width: 100%; max-width: 1200px;">
+    <!-- Header -->
+    <div class="panel pad">
+      <div class="row" style="justify-content: space-between; align-items: center;">
+        <div class="row" style="gap:15px;">
+          <div class="logo"><i class="fa-solid fa-check-double"></i></div>
+          <div>
+            <div class="h1">Payment Verification Portal</div>
+            <div class="muted small">Review and approve tenant M-Pesa payments</div>
+          </div>
+        </div>
+        <div class="row" style="gap:10px;">
+          <span id="serverStatus" style="font-size:0.8rem; color:#22c55e;">● Online</span>
+          <a href="dashboard.html" class="btn ghost"><i class="fa-solid fa-arrow-left"></i> Back to Dashboard</a>
+          <a href="#" class="btn ghost" id="logoutBtn"><i class="fa-solid fa-sign-out-alt"></i> Logout</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Statistics -->
+    <div class="verification-stats" id="statsContainer">
+      <div class="stat-card">
+        <div class="stat-value" id="pendingBillsCount">0</div>
+        <div class="stat-label">Pending Bills</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="pendingUploadsCount">0</div>
+        <div class="stat-label">Pending Uploads</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="totalUploadsCount">0</div>
+        <div class="stat-label">Total Uploads</div>
+      </div>
+    </div>
+
+    <!-- Pending Bills Section -->
+    <div class="panel pad" style="margin-top: 20px;">
+      <div class="h2">
+        <i class="fa-solid fa-clock"></i> Pending Clearances
+        <button class="btn ghost" style="float: right; padding: 4px 12px;" onclick="refreshAllData()">
+          <i class="fa-solid fa-sync-alt"></i> Refresh
+        </button>
+      </div>
+      <div id="verifyList" style="margin-top: 15px;">
+        <p class="muted"><i class="fa-solid fa-spinner fa-spin"></i> Scanning for unpaid bills...</p>
+      </div>
+    </div>
+
+    <!-- Tenant Uploads Queue -->
+    <div class="panel pad" style="margin-top: 20px;">
+      <div class="h2"><i class="fa-solid fa-upload"></i> Tenant Uploads Queue (FIFO)</div>
+      <div id="uploadList" style="margin-top: 15px;">
+        <p class="muted"><i class="fa-solid fa-spinner fa-spin"></i> Loading tenant uploads...</p>
+      </div>
+    </div>
+
+    <!-- All Upload Records -->
+    <div class="panel pad" style="margin-top: 20px; margin-bottom: 80px;">
+      <div class="h2"><i class="fa-solid fa-database"></i> All Tenant Upload Records</div>
+      <div id="uploadTable" style="margin-top: 15px; overflow-x: auto;">
+        <p class="muted"><i class="fa-solid fa-spinner fa-spin"></i> Loading upload records...</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating Refresh Button -->
+  <button class="refresh-btn" onclick="refreshAllData()">
+    <i class="fa-solid fa-sync-alt"></i>
+  </button>
 
   <script src="api-config.js"></script>
   <script>
     const API_URL = window.SAFTECH_API_URL;
     const API_BASE = API_URL.replace(/\/api$/, '');
+    let autoRefreshInterval = null;
 
+    // ========== AUTHENTICATION CHECK ==========
+    (function checkAuthentication() {
+        const role = localStorage.getItem('saftech_role');
+        
+        // Only caretakers can access verification page
+        if (role !== 'caretaker') {
+            console.warn('Unauthorized access attempt to verification portal');
+            if (role === 'tenant') {
+                window.location.href = 'tenant.html';
+            } else {
+                window.location.href = 'index.html';
+            }
+            return;
+        }
+        
+        console.log('✓ Verification portal accessed by caretaker');
+        
+        // Update server status periodically
+        checkServerStatus();
+        setInterval(checkServerStatus, 30000);
+    })();
+
+    // ========== LOGOUT FUNCTIONALITY ==========
+    document.getElementById('logoutBtn').addEventListener('click', (e) => {
+        e.preventDefault();
+        if (autoRefreshInterval) {
+            clearInterval(autoRefreshInterval);
+        }
+        window.logout();
+    });
+
+    // ========== CHECK SERVER STATUS ==========
+    async function checkServerStatus() {
+        try {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 3000);
+            await fetch(`${API_URL}/settings`, { signal: controller.signal });
+            document.getElementById('serverStatus').innerHTML = '● Online';
+            document.getElementById('serverStatus').style.color = '#22c55e';
+        } catch (e) {
+            document.getElementById('serverStatus').innerHTML = '● Offline';
+            document.getElementById('serverStatus').style.color = '#ef4444';
+        }
+    }
+
+    // ========== UPDATE STATISTICS ==========
+    async function updateStats(pendingBills, pendingUploads, totalUploads) {
+        document.getElementById('pendingBillsCount').textContent = pendingBills || 0;
+        document.getElementById('pendingUploadsCount').textContent = pendingUploads || 0;
+        document.getElementById('totalUploadsCount').textContent = totalUploads || 0;
+    }
+
+    // ========== VIEW FULL IMAGE ==========
+    function viewFullImage(imageUrl) {
+        const modal = document.getElementById('imageModal');
+        const modalImg = document.getElementById('modalImage');
+        modalImg.src = `${API_BASE}${imageUrl}`;
+        modal.style.display = 'flex';
+    }
+
+    function closeImageModal() {
+        document.getElementById('imageModal').style.display = 'none';
+    }
+
+    // ========== LOAD PENDING BILLS ==========
     async function loadPending() {
-      const container = document.getElementById('verifyList');
-      const [unitRes, latestRes] = await Promise.all([
-        fetch(`${API_URL}/payments/pending`),
-        fetch(`${API_URL}/payments/uploads/latest`)
-      ]);
-      const units = await unitRes.json();
-      const latestUploads = await latestRes.json();
-      const latestByUnit = new Map(latestUploads.map(u => [String(u.unit_id).toUpperCase(), u]));
-      
-      if (units.length === 0) {
-        container.innerHTML = `<div class="muted" style="text-align:center; padding: 20px;">✅ All bills are currently cleared.</div>`;
-        return;
-      }
+        const container = document.getElementById('verifyList');
+        try {
+            const unitRes = await fetch(`${API_URL}/units`);
+            const units = await unitRes.json();
+            const pendingUnits = units.filter(u => u.tenant_name && u.tenant_name.trim() !== "" && Number(u.total_bill) > 0);
+            
+            // Get latest uploads for each unit
+            const latestRes = await fetch(`${API_URL}/payments/uploads/latest`).catch(() => ({ ok: false }));
+            let latestByUnit = new Map();
+            if (latestRes.ok) {
+                const latestUploads = await latestRes.json();
+                latestByUnit = new Map(latestUploads.map(u => [String(u.unit_id).toUpperCase(), u]));
+            }
+            
+            if (pendingUnits.length === 0) {
+                container.innerHTML = `<div class="muted" style="text-align:center; padding: 30px;">
+                    <i class="fa-solid fa-check-circle" style="font-size: 48px; color: #10b981; margin-bottom: 10px; display: block;"></i>
+                    ✅ All bills are currently cleared.
+                </div>`;
+                updateStats(0, 0, 0);
+                return;
+            }
 
-      container.innerHTML = units.map(u => `
-        <div class="panel pad" style="margin-bottom: 10px; border: 1px solid #333;">
-          <div class="row" style="justify-content: space-between;">
-            <div>
-              <div style="font-weight: bold; font-size: 1.1em;">Unit ${u.id} - ${u.tenant_name}</div>
-              <div class="muted small">Total Due: <span style="color: #00d1b2; font-weight:bold;">KES ${u.total_bill.toLocaleString()}</span></div>
-              ${(() => {
+            let totalPendingUploads = 0;
+            container.innerHTML = pendingUnits.map(u => {
                 const up = latestByUnit.get(String(u.id).toUpperCase());
-                if (!up) {
-                  return `<div class="small muted" style="margin-top:8px;">No tenant proof uploaded yet.</div>`;
-                }
-                const statusColor = up.status === 'Pending' ? '#f59e0b' : (up.status === 'Approved' ? '#10b981' : '#ef4444');
+                if (up && up.status === 'Pending') totalPendingUploads++;
+                
+                const statusColor = !up ? '#64748b' : (up.status === 'Pending' ? '#f59e0b' : (up.status === 'Approved' ? '#10b981' : '#ef4444'));
+                const statusText = !up ? 'No Upload' : up.status;
+                
                 return `
-                  <div style="margin-top:10px; padding:10px; border:1px solid #334155; border-radius:10px; background:rgba(15,23,42,0.45);">
-                    <div class="small muted">Latest Upload • <span style="color:${statusColor}; font-weight:700;">${up.status}</span> • ${new Date(up.created_at).toLocaleString()}</div>
-                    <div class="small" style="margin-top:6px; white-space:pre-wrap;">${up.message || ''}</div>
-                    <div class="small muted" style="margin-top:4px;">Code: ${up.tx_code || 'N/A'} • Phone: ${up.tenant_phone || 'N/A'}</div>
-                    ${up.image_url ? `<a class="small" href="${API_BASE}${up.image_url}" target="_blank" style="display:inline-block;margin-top:6px;color:#00d1b2;">View uploaded screenshot</a>` : `<div class="small muted" style="margin-top:6px;">No screenshot attached.</div>`}
-                  </div>
-                `;
-              })()}
-            </div>
-            <div style="display:flex; flex-direction:column; gap:8px; align-items:flex-end;">
-              <button class="btn primary" onclick="approvePayment('${u.id}')">
-                <i class="fa-solid fa-check"></i> Approve & Clear
-              </button>
-              ${(() => {
-                const up = latestByUnit.get(String(u.id).toUpperCase());
-                if (!up || up.status !== 'Pending') return '';
-                return `
-                  <button class="btn ghost" onclick="reviewUpload(${up.id}, 'approve')">
-                    <i class="fa-solid fa-check-double"></i> Approve Upload
-                  </button>
-                  <button class="btn ghost" onclick="reviewUpload(${up.id}, 'reject')">
-                    <i class="fa-solid fa-xmark"></i> Reject Upload
-                  </button>
-                `;
-              })()}
-            </div>
-          </div>
-        </div>
-      `).join('');
+                <div class="panel pad verification-item" style="margin-bottom: 15px; border: 1px solid #334155;">
+                    <div class="row" style="justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 15px;">
+                        <div style="flex: 1;">
+                            <div style="font-weight: bold; font-size: 1.2em;">
+                                Unit ${escapeHtml(u.id)} - ${escapeHtml(u.tenant_name)}
+                                <span class="status-badge status-pending" style="margin-left: 10px;">Due: KES ${u.total_bill.toLocaleString()}</span>
+                            </div>
+                            <div class="muted small" style="margin-top: 8px;">
+                                <i class="fa-solid fa-phone"></i> ${escapeHtml(u.tenant_phone || 'N/A')} &nbsp;|&nbsp;
+                                <i class="fa-solid fa-calendar"></i> Last Bill: ${new Date(u.updated_at).toLocaleDateString()}
+                            </div>
+                            ${up ? `
+                                <div style="margin-top: 12px; padding: 10px; border: 1px solid #334155; border-radius: 10px; background: rgba(15,23,42,0.45);">
+                                    <div class="small muted">
+                                        <i class="fa-solid fa-upload"></i> Latest Upload • 
+                                        <span style="color:${statusColor}; font-weight:700;">${statusText}</span> • 
+                                        ${new Date(up.created_at).toLocaleString()}
+                                    </div>
+                                    <div class="small" style="margin-top: 6px; white-space: pre-wrap;">${escapeHtml(up.message || '')}</div>
+                                    <div class="small muted" style="margin-top: 4px;">
+                                        <i class="fa-solid fa-hashtag"></i> Code: ${escapeHtml(up.tx_code || 'N/A')} • 
+                                        <i class="fa-solid fa-phone"></i> Phone: ${escapeHtml(up.tenant_phone || 'N/A')}
+                                    </div>
+                                    ${up.image_url ? `
+                                        <div style="margin-top: 8px;">
+                                            <img src="${API_BASE}${up.image_url}" alt="proof" class="proof-image" onclick="viewFullImage('${up.image_url}')">
+                                        </div>
+                                    ` : '<div class="small muted" style="margin-top: 6px;"><i class="fa-solid fa-image"></i> No screenshot attached.</div>'}
+                                </div>
+                            ` : '<div class="muted small" style="margin-top: 12px;"><i class="fa-solid fa-info-circle"></i> No payment proof uploaded yet.</div>'}
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 8px; min-width: 140px;">
+                            <button class="btn btn-primary" onclick="approvePayment('${u.id}')">
+                                <i class="fa-solid fa-check-circle"></i> Approve & Clear
+                            </button>
+                            ${up && up.status === 'Pending' ? `
+                                <button class="btn ghost" onclick="reviewUpload(${up.id}, 'approve')">
+                                    <i class="fa-solid fa-thumbs-up"></i> Approve Upload
+                                </button>
+                                <button class="btn ghost" onclick="reviewUpload(${up.id}, 'reject')">
+                                    <i class="fa-solid fa-thumbs-down"></i> Reject Upload
+                                </button>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            `}).join('');
+            
+            // Update stats after counting
+            const totalUploadsRes = await fetch(`${API_URL}/payments/uploads`).catch(() => ({ ok: false }));
+            let totalUploads = 0;
+            if (totalUploadsRes.ok) {
+                const allUploads = await totalUploadsRes.json();
+                totalUploads = allUploads.length;
+            }
+            updateStats(pendingUnits.length, totalPendingUploads, totalUploads);
+            
+        } catch (err) {
+            console.error("Error loading pending bills:", err);
+            container.innerHTML = `<div class="muted" style="text-align:center; padding: 30px; color: #ef4444;">
+                <i class="fa-solid fa-exclamation-triangle" style="font-size: 48px; margin-bottom: 10px; display: block;"></i>
+                Error loading pending bills. Please check connection.
+            </div>`;
+        }
     }
 
+    // ========== LOAD PENDING UPLOADS QUEUE ==========
     async function loadUploads() {
-      const container = document.getElementById('uploadList');
-      try {
-        const res = await fetch(`${API_URL}/payments/uploads/pending`);
-        const uploads = await res.json();
-        if (!uploads.length) {
-          container.innerHTML = `<div class="muted" style="text-align:center; padding: 10px;">No pending tenant uploads.</div>`;
-          return;
+        const container = document.getElementById('uploadList');
+        try {
+            const res = await fetch(`${API_URL}/payments/uploads/pending`);
+            if (!res.ok) throw new Error('Failed to load');
+            const uploads = await res.json();
+            
+            if (!uploads.length) {
+                container.innerHTML = `<div class="muted" style="text-align:center; padding: 30px;">
+                    <i class="fa-solid fa-inbox" style="font-size: 48px; color: #64748b; margin-bottom: 10px; display: block;"></i>
+                    No pending tenant uploads.
+                </div>`;
+                return;
+            }
+            
+            container.innerHTML = uploads.map(u => `
+                <div class="panel pad verification-item" style="margin-bottom: 15px; border: 1px solid #334155;">
+                    <div class="row" style="justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 15px;">
+                        <div style="flex: 1;">
+                            <div style="font-weight: bold; font-size: 1.1em;">
+                                Unit ${escapeHtml(u.unit_id)} • ${escapeHtml(u.tenant_phone)}
+                                <span class="status-badge status-pending" style="margin-left: 10px;">Pending Review</span>
+                            </div>
+                            <div class="muted small">
+                                <i class="fa-solid fa-hashtag"></i> Code: ${escapeHtml(u.tx_code || 'N/A')} • 
+                                <i class="fa-solid fa-clock"></i> ${new Date(u.created_at).toLocaleString()}
+                            </div>
+                            <div class="small" style="margin-top: 8px; white-space: pre-wrap; background: rgba(0,0,0,0.2); padding: 8px; border-radius: 6px;">
+                                ${escapeHtml(u.message || '')}
+                            </div>
+                            ${u.image_url ? `
+                                <div style="margin-top: 10px;">
+                                    <img src="${API_BASE}${u.image_url}" alt="proof" class="proof-image" onclick="viewFullImage('${u.image_url}')">
+                                </div>
+                            ` : '<div class="small muted" style="margin-top: 8px;"><i class="fa-solid fa-image"></i> No screenshot attached.</div>'}
+                        </div>
+                        <div style="display: flex; gap: 8px; min-width: 120px;">
+                            <button class="btn btn-primary" onclick="reviewUpload(${u.id}, 'approve')">
+                                <i class="fa-solid fa-check"></i> Approve
+                            </button>
+                            <button class="btn ghost" onclick="reviewUpload(${u.id}, 'reject')">
+                                <i class="fa-solid fa-xmark"></i> Reject
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        } catch (err) {
+            console.error("Error loading uploads:", err);
+            container.innerHTML = `<div class="muted small" style="text-align:center; padding: 20px; color: #ef4444;">Could not load tenant uploads.</div>`;
         }
-        container.innerHTML = uploads.map(u => `
-          <div class="panel pad" style="margin-bottom: 10px; border: 1px solid #333;">
-            <div class="row" style="justify-content: space-between; align-items: flex-start;">
-              <div>
-                <div style="font-weight: bold;">Unit ${u.unit_id} • ${u.tenant_phone}</div>
-                <div class="muted small">Code: ${u.tx_code || 'N/A'} • ${new Date(u.created_at).toLocaleString()}</div>
-                <div class="small" style="margin-top:8px; white-space: pre-wrap;">${u.message}</div>
-                ${u.image_url ? `<a class="small" href="${API_BASE}${u.image_url}" target="_blank" style="display:inline-block;margin-top:8px;color:#00d1b2;">View uploaded screenshot</a><br/><img src="${API_BASE}${u.image_url}" alt="proof" style="margin-top:8px; max-width:180px; border-radius:8px; border:1px solid #334155;" />` : '<div class="small muted" style="margin-top:6px;">No screenshot attached.</div>'}
-              </div>
-              <div style="display:flex; gap:8px; margin-left:12px;">
-                <button class="btn primary" onclick="reviewUpload(${u.id}, 'approve')"><i class="fa-solid fa-check"></i> Approve</button>
-                <button class="btn ghost" onclick="reviewUpload(${u.id}, 'reject')"><i class="fa-solid fa-xmark"></i> Reject</button>
-              </div>
-            </div>
-          </div>
-        `).join('');
-      } catch (_err) {
-        container.innerHTML = `<div class="muted small">Could not load tenant uploads.</div>`;
-      }
     }
 
+    // ========== LOAD ALL UPLOAD RECORDS ==========
     async function loadUploadTable() {
-      const container = document.getElementById('uploadTable');
-      try {
-        const res = await fetch(`${API_URL}/payments/uploads`);
-        const rows = await res.json();
-        if (!rows.length) {
-          container.innerHTML = `<div class="muted" style="text-align:center; padding: 10px;">No upload records found.</div>`;
-          return;
+        const container = document.getElementById('uploadTable');
+        try {
+            const res = await fetch(`${API_URL}/payments/uploads`);
+            if (!res.ok) throw new Error('Failed to load');
+            const rows = await res.json();
+            
+            if (!rows.length) {
+                container.innerHTML = `<div class="muted" style="text-align:center; padding: 30px;">
+                    <i class="fa-solid fa-database" style="font-size: 48px; color: #64748b; margin-bottom: 10px; display: block;"></i>
+                    No upload records found.
+                </div>`;
+                return;
+            }
+            
+            container.innerHTML = rows.map(r => {
+                let statusClass = '';
+                if (r.status === 'Approved') statusClass = 'status-approved';
+                else if (r.status === 'Rejected') statusClass = 'status-rejected';
+                else statusClass = 'status-pending';
+                
+                return `
+                <div class="panel pad verification-item" style="margin-bottom: 10px; border: 1px solid #334155;">
+                    <div class="row" style="justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 15px;">
+                        <div style="flex: 1;">
+                            <div style="font-weight: 700;">
+                                Unit ${escapeHtml(r.unit_id)} • ${escapeHtml(r.tenant_phone)}
+                                <span class="status-badge ${statusClass}" style="margin-left: 10px;">${escapeHtml(r.status)}</span>
+                            </div>
+                            <div class="muted small">
+                                <i class="fa-solid fa-hashtag"></i> Code: ${escapeHtml(r.tx_code || 'N/A')} • 
+                                <i class="fa-solid fa-clock"></i> ${new Date(r.created_at).toLocaleString()}
+                                ${r.reviewed_at ? ` • Reviewed: ${new Date(r.reviewed_at).toLocaleString()}` : ''}
+                            </div>
+                            <div class="small" style="margin-top: 6px; white-space: pre-wrap;">${escapeHtml(r.message || '')}</div>
+                            ${r.image_url ? `
+                                <img src="${API_BASE}${r.image_url}" alt="tenant proof" class="proof-image" style="margin-top: 8px;" onclick="viewFullImage('${r.image_url}')">
+                            ` : '<div class="small muted" style="margin-top: 6px;">No screenshot attached.</div>'}
+                        </div>
+                    </div>
+                </div>
+            `}).join('');
+        } catch (err) {
+            console.error("Error loading upload table:", err);
+            container.innerHTML = `<div class="muted small" style="text-align:center; padding: 20px; color: #ef4444;">Could not load upload records.</div>`;
         }
-        container.innerHTML = rows.map(r => `
-          <div class="panel pad" style="margin-bottom:10px; border:1px solid #334155;">
-            <div class="row" style="justify-content: space-between; align-items:flex-start;">
-              <div style="flex:1;">
-                <div style="font-weight:700;">Unit ${r.unit_id} • ${r.tenant_phone}</div>
-                <div class="muted small">Code: ${r.tx_code || 'N/A'} • Status: ${r.status} • ${new Date(r.created_at).toLocaleString()}</div>
-                <div class="small" style="margin-top:6px; white-space:pre-wrap;">${r.message || ''}</div>
-                ${r.image_url ? `<img src="${API_BASE}${r.image_url}" alt="tenant proof" style="margin-top:8px; max-width:220px; border-radius:8px; border:1px solid #334155;" />` : `<div class="small muted" style="margin-top:6px;">No screenshot attached.</div>`}
-              </div>
-              <div style="display:flex; flex-direction:column; gap:8px; margin-left:10px;">
-                ${r.status === 'Pending' ? `
-                  <button class="btn primary" onclick="reviewUpload(${r.id}, 'approve')"><i class="fa-solid fa-check"></i> Accept</button>
-                  <button class="btn ghost" onclick="reviewUpload(${r.id}, 'reject')"><i class="fa-solid fa-xmark"></i> Reject</button>
-                ` : `<span class="badge ${r.status === 'Approved' ? 'success' : 'warning'}">${r.status}</span>`}
-              </div>
-            </div>
-          </div>
-        `).join('');
-      } catch (_err) {
-        container.innerHTML = `<div class="muted small">Could not load upload records.</div>`;
-      }
     }
 
+    // ========== APPROVE PAYMENT (Clear Bill) ==========
     async function approvePayment(unitId) {
-      if(!confirm(`Clear balance for Unit ${unitId}?`)) return;
+        if(!confirm(`⚠️ WARNING: This will clear the entire balance for Unit ${unitId}. Continue?`)) return;
 
-      try {
-        const res = await fetch(`${API_URL}/payments/approve`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ unitId })
-        });
-        const payload = await res.json().catch(() => ({}));
-        if (res.ok) {
-          alert(`Success: Unit ${unitId} is now cleared.`);
-          loadPending();
-        } else {
-          alert(payload.error || "Error approving payment.");
+        const btn = event.target.closest('button');
+        const originalText = btn.innerHTML;
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Processing...';
+        btn.disabled = true;
+
+        try {
+            const res = await fetch(`${API_URL}/payments/approve`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ unitId })
+            });
+            const payload = await res.json().catch(() => ({}));
+            if (res.ok) {
+                alert(`✅ Success: Unit ${unitId} balance has been cleared.`);
+                refreshAllData();
+            } else {
+                alert(`❌ Error: ${payload.error || "Could not approve payment."}`);
+            }
+        } catch (err) {
+            alert(`❌ Error approving payment: ${err.message}`);
+        } finally {
+            btn.innerHTML = originalText;
+            btn.disabled = false;
         }
-      } catch (err) {
-        alert(`Error approving payment: ${err.message}`);
-      }
     }
 
+    // ========== REVIEW UPLOAD ==========
     async function reviewUpload(uploadId, action) {
-      const title = action === 'approve' ? 'approve' : 'reject';
-      if (!confirm(`Confirm ${title} for upload #${uploadId}?`)) return;
+        const title = action === 'approve' ? 'approve' : 'reject';
+        const confirmMsg = action === 'approve' 
+            ? `✅ Confirm APPROVE upload #${uploadId}? This will mark the payment as verified.`
+            : `❌ Confirm REJECT upload #${uploadId}? The tenant will need to resubmit.`;
+            
+        if (!confirm(confirmMsg)) return;
 
-      try {
-        const res = await fetch(`${API_URL}/payments/uploads/${uploadId}/review`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action })
+        const btns = document.querySelectorAll(`button[onclick*="reviewUpload(${uploadId}"]`);
+        btns.forEach(btn => {
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i>';
+            btn.disabled = true;
         });
-        const payload = await res.json().catch(() => ({}));
-        if (!res.ok) {
-          throw new Error(payload.error || `Could not ${title} upload.`);
+
+        try {
+            const res = await fetch(`${API_URL}/payments/uploads/${uploadId}/review`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action })
+            });
+            const payload = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                throw new Error(payload.error || `Could not ${title} upload.`);
+            }
+            alert(`✅ Upload ${title}d successfully.`);
+            refreshAllData();
+        } catch (err) {
+            alert(`❌ ${err.message}`);
+        } finally {
+            refreshAllData();
         }
-        alert(`Upload ${title}d successfully.`);
-        await loadPending();
-        await loadUploads();
-        await loadUploadTable();
-      } catch (err) {
-        alert(err.message);
-      }
     }
 
+    // ========== REFRESH ALL DATA ==========
+    async function refreshAllData() {
+        await Promise.all([
+            loadPending(),
+            loadUploads(),
+            loadUploadTable()
+        ]);
+    }
+
+    // ========== ESCAPE HTML FOR SECURITY ==========
+    function escapeHtml(str) {
+        if (!str) return '';
+        return str.replace(/[&<>]/g, function(m) {
+            if (m === '&') return '&amp;';
+            if (m === '<') return '&lt;';
+            if (m === '>') return '&gt;';
+            return m;
+        });
+    }
+
+    // ========== INITIALIZATION ==========
     window.onload = async () => {
-      await loadPending();
-      await loadUploads();
-      await loadUploadTable();
+        await refreshAllData();
+        
+        // Auto-refresh every 30 seconds
+        autoRefreshInterval = setInterval(refreshAllData, 30000);
+        
+        console.log('✓ Verification portal loaded successfully');
     };
+    
+    // Clean up interval on page unload
+    window.addEventListener('beforeunload', () => {
+        if (autoRefreshInterval) {
+            clearInterval(autoRefreshInterval);
+        }
+    });
   </script>
 </body>
 </html>
